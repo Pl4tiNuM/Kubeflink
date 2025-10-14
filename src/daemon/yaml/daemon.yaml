@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: list-services
+  namespace: default
+spec:
+  serviceAccountName: list-services-sa
+  containers:
+  - name: kubeflink-daemon
+    image: pl4tinum/kubeflink-daemon:latest
