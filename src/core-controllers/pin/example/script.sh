@@ -1,0 +1,1 @@
+curl -X POST   -H "Content-Type: application/json"   -d @payload.json http://localhost:4002/api/pin_pod_cores

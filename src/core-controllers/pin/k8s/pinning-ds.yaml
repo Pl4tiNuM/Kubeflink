@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cgroup-pinning-service
+  labels:
+    app: cgroup-pinning-service
+spec:
+  selector:
+    matchLabels:
+      app: cgroup-pinning-service
+  template:
+    metadata:
+      labels:
+        app: cgroup-pinning-service
+    spec:
+      # CRITICAL: Allows the Pod to access the host's networking stack,
+      # making the service reachable via the host's IP on port 4002.
+      hostNetwork: true
+
+      # This service must run on Linux worker nodes only.
+      nodeSelector:
+        kubernetes.io/os: linux
+
+      # Exclude master/control-plane nodes
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+
+      tolerations:
+        - operator: Exists # tolerate taints on worker nodes (if any), but affinity excludes masters
+
+      containers:
+        - name: cgroup-pinning-service
+          image: iwita/kubeflink-core-pinning
+          imagePullPolicy: Always
+          # command: ["/bin/sh", "-c"]
+          # args:
+          # - "sleep infinity"
+
+          # CRITICAL: Grants the container full root access required to write to /sys/fs/cgroup
+          securityContext:
+            privileged: true
+
+          ports:
+            - containerPort: 4002
+              hostPort: 4002
+              name: api-port
+
+          # Mount host volumes required for cgroup manipulation and crictl execution
+          volumeMounts:
+            - name: cgroup-fs
+              mountPath: /sys/fs/cgroup
+            - name: containerd-socket
+              mountPath: /var/run/containerd/containerd.sock
+            - name: crictl-binary
+              mountPath: /usr/bin/crictl
+              readOnly: true
+            - name: host-proc
+              mountPath: /proc
+              readOnly: true
+
+      volumes:
+        - name: cgroup-fs
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory
+        - name: containerd-socket
+          hostPath:
+            path: /var/run/containerd/containerd.sock
+            type: Socket
+        - name: crictl-binary
+          hostPath:
+            path: /usr/bin/crictl
+            type: File
+        - name: host-proc
+          hostPath:
+            path: /proc
+            type: Directory

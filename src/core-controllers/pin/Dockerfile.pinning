@@ -1,0 +1,23 @@
+# Use a lightweight Python base image
+FROM python:3.11-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Install system dependencies if needed (none strictly required for this Python version)
+
+# Copy the requirements file and install dependencies
+
+RUN pip install --no-cache-dir flask requests
+
+# Copy the service code into the container
+COPY pinning.py .
+
+# The Flask app runs on port 4002 (as defined in the script)
+EXPOSE 4002
+
+# The service must run as root to access crictl and write to /sys/fs/cgroup
+# It's assumed the final container deployment will grant necessary privileges (e.g., --privileged)
+
+# Command to run the Flask application
+CMD ["python", "pinning.py"]

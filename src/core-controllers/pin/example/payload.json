@@ -1,0 +1,5 @@
+{
+    "pod_name": "flink-test-taskmanager-1-1",
+    "cores": "0",
+    "container_name": "flink-main-container"
+}
