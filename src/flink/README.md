@@ -1,24 +1,11 @@
-## Install Java, Maven, etc
- ```sh
- curl -s "https://get.sdkman.io" | bash
- source "$HOME/.sdkman/bin/sdkman-init.sh"
- sdk list java
- sdk install java 17.0.11-tem
- sdk use java 17.0.11-tem
+## Patches applied to flink source code to support Kubeflink's operation
 
- sdk list maven
- sdk install maven 3.8.6
- sdk use maven 3.8.6
+This folder includes all the file changes made to support Kubeflink's operation. The changes are made on top of Flink v2.1.0. Simply use the dockerfile to build the image and then use it when deploying a Flink application natively over Kubernetes.
+
+```
+docker built -t kubeflink .
 ```
 
-## Build Flink
-```sh
-mvn spotless:apply
-mvn clean install -DskipTests -pl flink-dist -am
-```
+### Changelog
 
-
-## Build Docker Image
-```sh
-docker build -t <username>/flink:latest -f Dockerfile .
-```
+`KubernetesResourceManagerDriver.java`: Added support to load TM resource profiles from a `.csv` file. Resource profiles currently include "CPU" and "MEM" requests for kubernetes. These are passed to `KubernetesTaskManagerParameters` class.
