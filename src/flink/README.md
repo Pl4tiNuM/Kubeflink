@@ -8,4 +8,4 @@ docker built -t kubeflink .
 
 ### Changelog
 
-`KubernetesResourceManagerDriver.java`: Added support to load TM resource profiles from a `.csv` file. Resource profiles currently include "CPU" and "MEM" requests for kubernetes. These are passed to `KubernetesTaskManagerParameters` class.
+- `KubernetesResourceManagerDriver.java`: Added support to load TM resource profiles from a `.csv` file. Resource profiles currently include "CPU" and "MEM" requests for kubernetes. These are passed to `KubernetesTaskManagerParameters` class.
