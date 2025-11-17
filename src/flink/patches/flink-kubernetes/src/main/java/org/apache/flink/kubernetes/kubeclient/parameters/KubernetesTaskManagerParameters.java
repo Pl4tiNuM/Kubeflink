@@ -31,8 +31,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.annotation.Nullable;
+
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
+
+import org.apache.flink.configuration.MemorySize;
+
 
 /**
  * A utility class helps parse, verify, and manage the Kubernetes side parameters that are used for
@@ -52,6 +57,36 @@ public class KubernetesTaskManagerParameters extends AbstractKubernetesParameter
 
     private final Set<String> blockedNodes;
 
+    private final Double overrideCpuLimit; // Kubeflink
+
+    private final MemorySize overrideMemLimit; // Kubeflink
+
+    private final Integer overrideNumSlots;   // Kubeflink
+
+
+    public KubernetesTaskManagerParameters(
+        Configuration flinkConfig,
+        String podName,
+        String dynamicProperties,
+        String jvmMemOptsEnv,
+        ContaineredTaskManagerParameters containeredTaskManagerParameters,
+        Map<String, String> taskManagerExternalResourceConfigKeys,
+        Set<String> blockedNodes) {
+
+    this(
+        flinkConfig,
+        podName,
+        dynamicProperties,
+        jvmMemOptsEnv,
+        containeredTaskManagerParameters,
+        taskManagerExternalResourceConfigKeys,
+        blockedNodes,
+        null,   // overrideCpuLimit
+        null,
+        null    // overrideMemoryLimit
+    );
+    }
+
     public KubernetesTaskManagerParameters(
             Configuration flinkConfig,
             String podName,
@@ -59,7 +94,10 @@ public class KubernetesTaskManagerParameters extends AbstractKubernetesParameter
             String jvmMemOptsEnv,
             ContaineredTaskManagerParameters containeredTaskManagerParameters,
             Map<String, String> taskManagerExternalResourceConfigKeys,
-            Set<String> blockedNodes) {
+            Set<String> blockedNodes,
+            @Nullable Double overrideCpuLimit,
+            @Nullable MemorySize overrideMemLimit,
+            @Nullable Integer overrideNumSlots) {
         super(flinkConfig);
         this.podName = checkNotNull(podName);
         this.dynamicProperties = checkNotNull(dynamicProperties);
@@ -68,6 +106,9 @@ public class KubernetesTaskManagerParameters extends AbstractKubernetesParameter
         this.taskManagerExternalResourceConfigKeys =
                 checkNotNull(taskManagerExternalResourceConfigKeys);
         this.blockedNodes = checkNotNull(blockedNodes);
+        this.overrideCpuLimit = overrideCpuLimit;
+        this.overrideMemLimit = overrideMemLimit;
+        this.overrideNumSlots = overrideNumSlots;
     }
 
     @Override
@@ -118,6 +159,9 @@ public class KubernetesTaskManagerParameters extends AbstractKubernetesParameter
     }
 
     public int getTaskManagerMemoryMB() {
+        if (overrideMemLimit != null) {
+            return (int) overrideMemLimit.getMebiBytes();
+        }
         return containeredTaskManagerParameters
                 .getTaskExecutorProcessSpec()
                 .getTotalProcessMemorySize()
@@ -125,11 +169,24 @@ public class KubernetesTaskManagerParameters extends AbstractKubernetesParameter
     }
 
     public double getTaskManagerCPU() {
+        if (overrideCpuLimit != null) {
+            return overrideCpuLimit;
+        }
         return containeredTaskManagerParameters
                 .getTaskExecutorProcessSpec()
                 .getCpuCores()
                 .getValue()
                 .doubleValue();
+    }
+
+    public int getTaskManagerSlots() {
+        if (overrideNumSlots != null) {
+            return overrideNumSlots;
+        }
+        // fall back to whatever Flink would normally use
+        return containeredTaskManagerParameters
+                .getTaskExecutorProcessSpec()
+                .getNumSlots();
     }
 
     public double getTaskManagerCPULimitFactor() {
@@ -172,8 +229,14 @@ public class KubernetesTaskManagerParameters extends AbstractKubernetesParameter
         return taskManagerRpcPort;
     }
 
+
     public String getDynamicProperties() {
         return dynamicProperties;
+    }
+
+    @Nullable
+    public Integer getOverrideNumSlots() {
+        return overrideNumSlots;
     }
 
     public String getJvmMemOptsEnv() {
