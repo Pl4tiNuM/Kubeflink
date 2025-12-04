@@ -43,6 +43,7 @@ import org.apache.flink.runtime.jobmaster.slotpool.SlotPoolService;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotPoolServiceFactory;
 import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.rpc.FatalErrorHandler;
+import org.apache.flink.runtime.scheduler.CustomSchedulerFactory;
 import org.apache.flink.runtime.scheduler.DefaultSchedulerFactory;
 import org.apache.flink.runtime.scheduler.SchedulerNG;
 import org.apache.flink.runtime.scheduler.SchedulerNGFactory;
@@ -215,6 +216,16 @@ public final class DefaultSlotPoolServiceSchedulerFactory
                                 batchSlotTimeout,
                                 slotRequestMaxInterval,
                                 slotBatchAllocatable,
+                                getRequestSlotMatchingStrategy(configuration, jobType));
+                break;
+            case Custom:
+                schedulerNGFactory = new CustomSchedulerFactory();
+                slotPoolServiceFactory =
+                        new DeclarativeSlotPoolBridgeServiceFactory(
+                                SystemClock.getInstance(),
+                                rpcTimeout,
+                                slotIdleTimeout,
+                                batchSlotTimeout,
                                 getRequestSlotMatchingStrategy(configuration, jobType));
                 break;
             default:
