@@ -515,11 +515,20 @@ public abstract class ResourceManager<WorkerType extends ResourceIDRetrievable>
                 taskExecutors.get(taskManagerResourceId);
 
         if (workerTypeWorkerRegistration.getInstanceID().equals(taskManagerRegistrationId)) {
+            ResourceProfile wTotalResourceProfile =
+                    workerTypeWorkerRegistration.getTotalResourceProfile();
+            log.info(
+                    "[KUBEFLINK] ResourceManager    sendSlotReport    taskManagerResourceId={} taskManagerRegistrationId={} wTotalResourceProfile={} ",
+                    taskManagerResourceId,
+                    taskManagerRegistrationId,
+                    wTotalResourceProfile);
+            wTotalResourceProfile.setPreferredLocation(taskManagerResourceId.toString());
             SlotManager.RegistrationResult registrationResult =
                     slotManager.registerTaskManager(
                             workerTypeWorkerRegistration,
                             slotReport,
-                            workerTypeWorkerRegistration.getTotalResourceProfile(),
+                            // workerTypeWorkerRegistration.getTotalResourceProfile(),
+                            wTotalResourceProfile,
                             workerTypeWorkerRegistration.getDefaultSlotResourceProfile());
             if (registrationResult == SlotManager.RegistrationResult.SUCCESS) {
                 WorkerResourceSpec workerResourceSpec =
