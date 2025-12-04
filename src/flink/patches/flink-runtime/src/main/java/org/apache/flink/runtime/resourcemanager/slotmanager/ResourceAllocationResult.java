@@ -23,6 +23,9 @@ import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.instance.InstanceID;
 import org.apache.flink.runtime.util.ResourceCounter;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -33,6 +36,9 @@ import java.util.Set;
 
 /** Contains the results of the {@link ResourceAllocationStrategy}. */
 public class ResourceAllocationResult {
+
+
+    private static final Logger LOG = LoggerFactory.getLogger(ResourceAllocationResult.class);
     private final Set<JobID> unfulfillableJobs;
     private final Map<JobID, Map<InstanceID, ResourceCounter>> allocationsOnRegisteredResources;
     private final List<PendingTaskManager> pendingTaskManagersToAllocate;
@@ -109,6 +115,13 @@ public class ResourceAllocationResult {
 
         public Builder addAllocationOnRegisteredResource(
                 JobID jobId, InstanceID instanceId, ResourceProfile resourceProfile) {
+
+                LOG.info(
+                    "[KUBEFLINK] ResourceAllocationResult    addAllocationOnRegisteredResource    jobId={} instanceId={} resourceProfile={}",
+                    jobId,
+                    instanceId,
+                    resourceProfile);
+
             this.allocationsOnRegisteredResources
                     .computeIfAbsent(jobId, jobID -> new HashMap<>())
                     .compute(
