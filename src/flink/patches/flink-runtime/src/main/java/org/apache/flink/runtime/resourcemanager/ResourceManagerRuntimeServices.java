@@ -91,6 +91,7 @@ public class ResourceManagerRuntimeServices {
                         slotManagerConfiguration.getTaskManagerTimeout(),
                         slotManagerConfiguration.getRedundantTaskManagerNum(),
                         slotManagerConfiguration.getMinTotalCpu(),
-                        slotManagerConfiguration.getMinTotalMem()));
+                        slotManagerConfiguration.getMinTotalMem(),
+                        slotManagerConfiguration.isCustomScheduler));
     }
 }
