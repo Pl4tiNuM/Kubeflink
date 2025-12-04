@@ -72,6 +72,8 @@ import java.util.stream.Collectors;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
+import org.apache.flink.runtime.resourcemanager.KubeflinkCRDLoader;
+
 /**
  * An active implementation of {@link ResourceManager}.
  *
@@ -226,11 +228,24 @@ public class ActiveResourceManager<WorkerType extends ResourceIDRetrievable>
 
     @VisibleForTesting
     public void declareResourceNeeded(Collection<ResourceDeclaration> resourceDeclarations) {
-        this.resourceDeclarations = Collections.unmodifiableCollection(resourceDeclarations);
-        log.debug("Update resource declarations to {}.", resourceDeclarations);
+        /* Kubeflink start */
+        Collection<ResourceDeclaration> kubeflinkDeclarations =
+                KubeflinkCRDLoader.loadFromDefaultPath(flinkConfig);
+
+        if (!kubeflinkDeclarations.isEmpty()) {
+            this.resourceDeclarations = Collections.unmodifiableCollection(kubeflinkDeclarations);
+            log.info(
+                    "Using TM resource declarations from /tm_configs.csv: {}",
+                    this.resourceDeclarations);
+        /* Kubeflink end */
+        } else {
+            this.resourceDeclarations = Collections.unmodifiableCollection(resourceDeclarations);
+            log.debug("Update resource declarations to {}.", this.resourceDeclarations);
+        }
 
         checkResourceDeclarations();
     }
+
 
     @Override
     protected void onWorkerRegistered(WorkerType worker, WorkerResourceSpec workerResourceSpec) {
