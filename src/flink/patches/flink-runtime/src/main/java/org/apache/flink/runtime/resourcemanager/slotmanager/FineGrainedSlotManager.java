@@ -634,6 +634,11 @@ public class FineGrainedSlotManager implements SlotManager {
                 resourceAllocationStrategy.tryFulfillRequirements(
                         missingResources, taskManagerTracker, this::isBlockedTaskManager);
 
+        LOG.info(
+                "[KUBEFLINK] FineGrainedSlotManager    checkResourceRequirements    result.getAllocationsOnRegisteredResources={}  ",
+                result.getAllocationsOnRegisteredResources());
+
+
         // Allocate slots according to the result
         allocateSlotsAccordingTo(result.getAllocationsOnRegisteredResources());
 
@@ -713,6 +718,12 @@ public class FineGrainedSlotManager implements SlotManager {
                 final InstanceID instanceID = tmEntry.getKey();
                 for (Map.Entry<ResourceProfile, Integer> slotEntry :
                         tmEntry.getValue().getResourcesWithCount()) {
+                        LOG.info(
+                            "[KUBEFLINK] FineGrainedSlotManager    allocateSlotsAccordingTo    jobID={} instanceID={} slotEntry={}__{}",
+                            jobID,
+                            instanceID,
+                            slotEntry.getKey(),
+                            slotEntry.getValue());
                     for (int i = 0; i < slotEntry.getValue(); ++i) {
                         allocationFutures.add(
                                 slotStatusSyncer.allocateSlot(
