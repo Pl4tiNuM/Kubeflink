@@ -806,7 +806,8 @@ class DefaultResourceAllocationStrategyTest {
                 Duration.ofMillis(0),
                 redundantTaskManagerNum,
                 new CPUResource(0.0),
-                MemorySize.ZERO);
+                MemorySize.ZERO,
+                false);
     }
 
     private static DefaultResourceAllocationStrategy createStrategy(
@@ -818,7 +819,8 @@ class DefaultResourceAllocationStrategyTest {
                 Duration.ofMillis(0),
                 0,
                 minRequiredCPU,
-                minRequiredMemory);
+                minRequiredMemory,
+                false);
     }
 
     private static void assertAllSlotsAllocatedToRegisteredTaskManagersOnly(
