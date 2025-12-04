@@ -26,6 +26,10 @@ import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.slots.ResourceRequirement;
 import org.apache.flink.util.Preconditions;
 
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -63,6 +67,10 @@ import static org.apache.flink.runtime.resourcemanager.slotmanager.SlotManagerUt
  * multidimensional resource profiles. The complexity is not necessary.
  */
 public class DefaultResourceAllocationStrategy implements ResourceAllocationStrategy {
+
+    private static final Logger LOG =
+            LoggerFactory.getLogger(DefaultResourceAllocationStrategy.class);
+
     private final ResourceProfile defaultSlotResourceProfile;
     private final ResourceProfile totalResourceProfile;
     private final int numSlotsPerWorker;
@@ -89,24 +97,29 @@ public class DefaultResourceAllocationStrategy implements ResourceAllocationStra
             Duration taskManagerTimeout,
             int redundantTaskManagerNum,
             CPUResource minTotalCPU,
-            MemorySize minTotalMemory) {
+            MemorySize minTotalMemory,
+            boolean isCustomScheduler) {
         this.totalResourceProfile = totalResourceProfile;
         this.numSlotsPerWorker = numSlotsPerWorker;
         this.defaultSlotResourceProfile =
                 SlotManagerUtils.generateDefaultSlotResourceProfile(
                         totalResourceProfile, numSlotsPerWorker);
-        switch (taskManagerLoadBalanceMode) {
-            case SLOTS:
-                this.availableResourceMatchingStrategy =
-                        PrioritizedResourceMatchingStrategy.leastUtilization();
-                break;
-            case MIN_RESOURCES:
-                this.availableResourceMatchingStrategy =
-                        PrioritizedResourceMatchingStrategy.mostUtilization();
-                break;
-            default:
-                this.availableResourceMatchingStrategy =
-                        AnyMatchingResourceMatchingStrategy.INSTANCE;
+        if (isCustomScheduler) {
+            this.availableResourceMatchingStrategy = LocationSlotMatchingStrategy.INSTANCE;
+        } else {
+            switch (taskManagerLoadBalanceMode) {
+                case SLOTS:
+                    this.availableResourceMatchingStrategy =
+                            PrioritizedResourceMatchingStrategy.leastUtilization();
+                    break;
+                case MIN_RESOURCES:
+                    this.availableResourceMatchingStrategy =
+                            PrioritizedResourceMatchingStrategy.mostUtilization();
+                    break;
+                default:
+                    this.availableResourceMatchingStrategy =
+                            AnyMatchingResourceMatchingStrategy.INSTANCE;
+            }
         }
 
         this.taskManagerTimeout = taskManagerTimeout;
@@ -132,6 +145,14 @@ public class DefaultResourceAllocationStrategy implements ResourceAllocationStra
                 Stream.concat(registeredResources.stream(), pendingResources.stream())
                         .map(internalResourceInfo -> internalResourceInfo.totalProfile)
                         .reduce(ResourceProfile.ZERO, ResourceProfile::merge);
+
+        LOG.info(
+                "[KUBEFLINK] DefaultResourceAllocationStrategy    tryFulfillRequirements111    missingResources={} registeredResources={} pendingResources={} totalCurrentResources={} resultBuilder={}",
+                missingResources,
+                registeredResources,
+                pendingResources,
+                totalCurrentResources,
+                resultBuilder.build().getAllocationsOnRegisteredResources());
 
         for (Map.Entry<JobID, Collection<ResourceRequirement>> resourceRequirements :
                 missingResources.entrySet()) {
@@ -483,6 +504,27 @@ public class DefaultResourceAllocationStrategy implements ResourceAllocationStra
             }
         }
 
+        boolean tryAllocateSlotForJobWithPreferredLocation(
+                JobID jobId, ResourceProfile requirement) {
+            final ResourceProfile effectiveProfile =
+                    getEffectiveResourceProfile(requirement, defaultSlotProfile);
+            effectiveProfile.setPreferredLocation(requirement.getPreferredLocation());
+            LOG.info(
+                    "mylog    DefaultResourceAllocationStrategy    tryAllocateSlotForJobWithPreferredLocation    totalProfile={} effectiveProfile={}",
+                    totalProfile,
+                    effectiveProfile);
+            if (totalProfile
+                    .getPreferredLocation()
+                    .contains(effectiveProfile.getPreferredLocation())) {
+                availableProfile = availableProfile.subtract(effectiveProfile);
+                allocationConsumer.accept(jobId, effectiveProfile);
+                utilization = updateUtilization();
+                return true;
+            } else {
+                return false;
+            }
+        }
+
         private double updateUtilization() {
             double cpuUtilization =
                     totalProfile
@@ -511,6 +553,37 @@ public class DefaultResourceAllocationStrategy implements ResourceAllocationStra
                 JobID jobId);
     }
 
+    private enum LocationSlotMatchingStrategy implements ResourceMatchingStrategy {
+        INSTANCE;
+
+        @Override
+        public int tryFulfilledRequirementWithResource(
+                List<InternalResourceInfo> internalResources,
+                int numUnfulfilled,
+                ResourceProfile requiredResource,
+                JobID jobId) {
+            final Iterator<InternalResourceInfo> internalResourceInfoItr =
+                    internalResources.iterator();
+            while (numUnfulfilled > 0 && internalResourceInfoItr.hasNext()) {
+                final InternalResourceInfo currentTaskManager = internalResourceInfoItr.next();
+                    LOG.info(
+                        "[KUBEFLINK] DefaultResourceAllocationStrategy    LocationSlotMatchingStrategy    currentTaskManager.totalProfile={} requiredResource={}",
+                        currentTaskManager.totalProfile,
+                        requiredResource);
+                while (numUnfulfilled > 0
+                        // && currentTaskManager.tryAllocateSlotForJob(jobId, requiredResource))
+                        && currentTaskManager.tryAllocateSlotForJobWithPreferredLocation(
+                                jobId, requiredResource)) {
+                    numUnfulfilled--;
+                }
+                if (currentTaskManager.availableProfile.equals(ResourceProfile.ZERO)) {
+                    internalResourceInfoItr.remove();
+                }
+            }
+            return numUnfulfilled;
+        }
+    }
+
     private enum AnyMatchingResourceMatchingStrategy implements ResourceMatchingStrategy {
         INSTANCE;
 
@@ -524,6 +597,10 @@ public class DefaultResourceAllocationStrategy implements ResourceAllocationStra
                     internalResources.iterator();
             while (numUnfulfilled > 0 && internalResourceInfoItr.hasNext()) {
                 final InternalResourceInfo currentTaskManager = internalResourceInfoItr.next();
+                LOG.info(
+                        "[KUBEFLINK] DefaultResourceAllocationStrategy    AnyMatchingResourceMatchingStrategy    currentTaskManager.totalProfile={} requiredResource={}",
+                        currentTaskManager.totalProfile,
+                        requiredResource);
                 while (numUnfulfilled > 0
                         && currentTaskManager.tryAllocateSlotForJob(jobId, requiredResource)) {
                     numUnfulfilled--;
