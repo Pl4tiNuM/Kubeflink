@@ -18,6 +18,13 @@
 
 package org.apache.flink.runtime.jobmaster.slotpool;
 
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.GlobalConfiguration;
+import org.apache.flink.configuration.JobManagerOptions;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -30,9 +37,30 @@ import java.util.LinkedList;
 public enum SimpleRequestSlotMatchingStrategy implements RequestSlotMatchingStrategy {
     INSTANCE;
 
+    private static final Logger log =
+            LoggerFactory.getLogger(SimpleRequestSlotMatchingStrategy.class);
+
     @Override
     public Collection<RequestSlotMatch> matchRequestsAndSlots(
             Collection<? extends PhysicalSlot> slots, Collection<PendingRequest> pendingRequests) {
+
+        JobManagerOptions.SchedulerType jcfg = null;
+        try {
+            String flinkHome = System.getenv("FLINK_CUSTOM_HOME");
+            String fpath = flinkHome + "/scripts/";
+            log.info("[KUBEFLINK] SimpleRequestSlotMatchingStrategy  workdir {}", fpath);
+            Configuration cfgs = GlobalConfiguration.loadConfiguration(fpath);
+            jcfg = cfgs.get(JobManagerOptions.SCHEDULER);
+            log.info(
+                    "[KUBEFLINK] SimpleRequestSlotMatchingStrategy  JobManagerOptions.SchedulerType={}",
+                    jcfg);
+        } catch (Exception e) {
+            log.error("[KUBEFLINK] SimpleRequestSlotMatchingStrategy  read configuration file error");
+            e.printStackTrace();
+        }
+        boolean isCustomScheduler =
+                (jcfg == JobManagerOptions.SchedulerType.Custom); // if using custom policy
+
         final Collection<RequestSlotMatch> resultingMatches = new ArrayList<>();
 
         // if pendingRequests has a special order, then let's preserve it
@@ -43,7 +71,29 @@ public enum SimpleRequestSlotMatchingStrategy implements RequestSlotMatchingStra
 
             while (pendingRequestIterator.hasNext()) {
                 final PendingRequest pendingRequest = pendingRequestIterator.next();
-                if (slot.getResourceProfile().isMatching(pendingRequest.getResourceProfile())) {
+                    log.info(
+                        "[KUBEFLINK] SimpleRequestSlotMatchingStrategy matchRequestsAndSlots    while_matching    "
+                                + "pendingRequest.getResourceProfile().getPreferredLocation={}    "
+                                + "pendingRequest.getSlotRequestId().getPreferredLocation={}    "
+                                + "slot.getTaskManagerLocation={}    ",
+                        pendingRequest.getResourceProfile().getPreferredLocation(),
+                        pendingRequest.getSlotRequestId().getPreferredLocation(),
+                        slot.getTaskManagerLocation());
+                boolean matchCondition;
+                if (isCustomScheduler)
+                    matchCondition =
+                            slot.getTaskManagerLocation()
+                                    .toString()
+                                    .contains(
+                                            pendingRequest
+                                                    .getSlotRequestId()
+                                                    .getPreferredLocation());
+                else
+                    matchCondition =
+                            slot.getResourceProfile()
+                                    .isMatching(pendingRequest.getResourceProfile());
+
+                if (matchCondition) {
                     resultingMatches.add(RequestSlotMatch.createFor(pendingRequest, slot));
                     pendingRequestIterator.remove();
                     break;
