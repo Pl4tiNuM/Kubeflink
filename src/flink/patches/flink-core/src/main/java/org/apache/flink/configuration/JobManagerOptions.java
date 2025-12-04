@@ -461,7 +461,8 @@ public class JobManagerOptions {
                         "Adaptive batch scheduler. More details can be found %s.",
                         link(
                                 "{{.Site.BaseURL}}{{.Site.LanguagePrefix}}/docs/deployment/elastic_scaling#adaptive-batch-scheduler",
-                                "here")));
+                                "here"))),
+        Custom(text("CustomScheduler"));
 
         private final InlineElement description;
 
