@@ -40,6 +40,11 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+
+import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
+
+
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -62,6 +67,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public class ResourceProfile implements Serializable {
 
+    private static final Logger LOG = LoggerFactory.getLogger(ResourceProfile.class);
     private static final long serialVersionUID = 1L;
 
     /**
@@ -114,6 +120,10 @@ public class ResourceProfile implements Serializable {
     @Nullable // can be null only for UNKNOWN
     private final MemorySize networkMemory;
 
+    /** Preferred location for this requested resource - e.g. IP address of task manager. */
+    @Nullable // can be null only for UNKNOWN
+    private String preferredLocation;
+
     /** A extensible field for user specified resources from {@link ResourceSpec}. */
     private final Map<String, ExternalResource> extendedResources;
 
@@ -135,7 +145,8 @@ public class ResourceProfile implements Serializable {
             final MemorySize taskOffHeapMemory,
             final MemorySize managedMemory,
             final MemorySize networkMemory,
-            final Map<String, ExternalResource> extendedResources) {
+            final Map<String, ExternalResource> extendedResources,
+            String preferredLocation) {
 
         checkNotNull(cpuCores);
 
@@ -144,6 +155,7 @@ public class ResourceProfile implements Serializable {
         this.taskOffHeapMemory = checkNotNull(taskOffHeapMemory);
         this.managedMemory = checkNotNull(managedMemory);
         this.networkMemory = checkNotNull(networkMemory);
+        this.preferredLocation = preferredLocation;
 
         this.extendedResources =
                 checkNotNull(extendedResources).entrySet().stream()
@@ -160,6 +172,7 @@ public class ResourceProfile implements Serializable {
         this.taskOffHeapMemory = null;
         this.managedMemory = null;
         this.networkMemory = null;
+        this.preferredLocation = null;
         this.extendedResources = new HashMap<>();
     }
 
@@ -233,6 +246,20 @@ public class ResourceProfile implements Serializable {
     public MemorySize getOperatorsMemory() {
         throwUnsupportedOperationExceptionIfUnknown();
         return taskHeapMemory.add(taskOffHeapMemory).add(managedMemory);
+    }
+
+
+    /**
+     * Get the preferred location.
+     *
+     * @return The preferred location
+     */
+    public String getPreferredLocation() {
+        return preferredLocation;
+    }
+
+    public void setPreferredLocation(String preferredLocation) {
+        this.preferredLocation = preferredLocation;
     }
 
     /**
@@ -356,6 +383,12 @@ public class ResourceProfile implements Serializable {
             return true;
         } else if (obj != null && obj.getClass() == ResourceProfile.class) {
             ResourceProfile that = (ResourceProfile) obj;
+            if (preferredLocation != null
+                && that.preferredLocation != null
+                && !(preferredLocation.contains(that.preferredLocation))
+                && !(that.preferredLocation.contains(preferredLocation))) {
+                return false;
+            }
             return Objects.equals(this.cpuCores, that.cpuCores)
                     && Objects.equals(taskHeapMemory, that.taskHeapMemory)
                     && Objects.equals(taskOffHeapMemory, that.taskOffHeapMemory)
@@ -400,7 +433,8 @@ public class ResourceProfile implements Serializable {
                 taskOffHeapMemory.add(other.taskOffHeapMemory),
                 managedMemory.add(other.managedMemory),
                 networkMemory.add(other.networkMemory),
-                resultExtendedResource);
+                resultExtendedResource,
+                preferredLocation);
     }
 
     /**
@@ -437,7 +471,8 @@ public class ResourceProfile implements Serializable {
                 taskOffHeapMemory.subtract(other.taskOffHeapMemory),
                 managedMemory.subtract(other.managedMemory),
                 networkMemory.subtract(other.networkMemory),
-                resultExtendedResource);
+                resultExtendedResource,
+                preferredLocation);
     }
 
     @Nonnull
@@ -470,7 +505,8 @@ public class ResourceProfile implements Serializable {
                 taskOffHeapMemory.multiply(multiplier),
                 managedMemory.multiply(multiplier),
                 networkMemory.multiply(multiplier),
-                resultExtendedResource);
+                resultExtendedResource,
+                preferredLocation);
     }
 
     @Override
@@ -502,6 +538,7 @@ public class ResourceProfile implements Serializable {
         resourceStr = addMemorySizeString(resourceStr, "taskOffHeapMemory", taskOffHeapMemory);
         resourceStr = addMemorySizeString(resourceStr, "managedMemory", managedMemory);
         resourceStr = addMemorySizeString(resourceStr, "networkMemory", networkMemory);
+        resourceStr += " preferredLocation=" + preferredLocation;
         return resourceStr;
     }
 
@@ -574,7 +611,8 @@ public class ResourceProfile implements Serializable {
                 .setTaskOffHeapMemory(resourceProfile.taskOffHeapMemory)
                 .setManagedMemory(resourceProfile.managedMemory)
                 .setNetworkMemory(resourceProfile.networkMemory)
-                .setExtendedResources(resourceProfile.extendedResources.values());
+                .setExtendedResources(resourceProfile.extendedResources.values())
+                .setPreferredLocation(resourceProfile.preferredLocation);
     }
 
     /** Builder for the {@link ResourceProfile}. */
@@ -586,8 +624,14 @@ public class ResourceProfile implements Serializable {
         private MemorySize managedMemory = MemorySize.ZERO;
         private MemorySize networkMemory = MemorySize.ZERO;
         private Map<String, ExternalResource> extendedResources = new HashMap<>();
+        private String preferredLocation = null;
 
         private Builder() {}
+
+        public Builder setPreferredLocation(String loc) {
+            this.preferredLocation = loc;
+            return this;
+        }
 
         public Builder setCpuCores(CPUResource cpuCores) {
             this.cpuCores = cpuCores;
@@ -668,7 +712,8 @@ public class ResourceProfile implements Serializable {
                     taskOffHeapMemory,
                     managedMemory,
                     networkMemory,
-                    extendedResources);
+                    extendedResources,
+                    preferredLocation);
         }
     }
 }
