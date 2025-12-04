@@ -105,6 +105,10 @@ public class TaskManagerConfiguration implements TaskManagerRuntimeInfo {
         this.taskManagerExternalAddress = taskManagerExternalAddress;
         this.tmpWorkingDirectory = tmpWorkingDirectory;
         this.retryingRegistrationConfiguration = retryingRegistrationConfiguration;
+
+        LOG.info("[KUBEFLINK] Setting preferredLocation to: {}", this.taskManagerExternalAddress);
+        this.defaultSlotResourceProfile.setPreferredLocation(this.taskManagerExternalAddress);
+        this.totalResourceProfile.setPreferredLocation(this.taskManagerExternalAddress);
     }
 
     public int getNumberSlots() {
