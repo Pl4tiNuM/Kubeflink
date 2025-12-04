@@ -22,6 +22,7 @@ import org.apache.flink.api.common.resources.CPUResource;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.ResourceManagerOptions;
+import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.RpcOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.resourcemanager.WorkerResourceSpec;
@@ -49,6 +50,7 @@ public class SlotManagerConfiguration {
     private final MemorySize minTotalMem;
     private final MemorySize maxTotalMem;
     private final int redundantTaskManagerNum;
+    public boolean isCustomScheduler = false;
 
     public SlotManagerConfiguration(
             Duration taskManagerRequestTimeout,
@@ -251,21 +253,42 @@ public class SlotManagerConfiguration {
         int redundantTaskManagerNum =
                 configuration.get(ResourceManagerOptions.REDUNDANT_TASK_MANAGER_NUM);
 
-        return new SlotManagerConfiguration(
-                rpcTimeout,
-                taskManagerTimeout,
-                requirementCheckDelay,
-                declareNeededResourceDelay,
-                taskManagerLoadBalanceMode,
-                defaultWorkerResourceSpec,
-                numSlotsPerWorker,
-                minSlotNum,
-                maxSlotNum,
-                getMinTotalCpu(configuration, defaultWorkerResourceSpec, minSlotNum),
-                getMaxTotalCpu(configuration, defaultWorkerResourceSpec, maxSlotNum),
-                getMinTotalMem(configuration, defaultWorkerResourceSpec, minSlotNum),
-                getMaxTotalMem(configuration, defaultWorkerResourceSpec, maxSlotNum),
-                redundantTaskManagerNum);
+        // return new SlotManagerConfiguration(
+        //         rpcTimeout,
+        //         taskManagerTimeout,
+        //         requirementCheckDelay,
+        //         declareNeededResourceDelay,
+        //         taskManagerLoadBalanceMode,
+        //         defaultWorkerResourceSpec,
+        //         numSlotsPerWorker,
+        //         minSlotNum,
+        //         maxSlotNum,
+        //         getMinTotalCpu(configuration, defaultWorkerResourceSpec, minSlotNum),
+        //         getMaxTotalCpu(configuration, defaultWorkerResourceSpec, maxSlotNum),
+        //         getMinTotalMem(configuration, defaultWorkerResourceSpec, minSlotNum),
+        //         getMaxTotalMem(configuration, defaultWorkerResourceSpec, maxSlotNum),
+        //         redundantTaskManagerNum);
+        SlotManagerConfiguration res =
+                new SlotManagerConfiguration(
+                        rpcTimeout,
+                        taskManagerTimeout,
+                        requirementCheckDelay,
+                        declareNeededResourceDelay,
+                        waitResultConsumedBeforeRelease,
+                        taskManagerLoadBalanceMode,
+                        defaultWorkerResourceSpec,
+                        numSlotsPerWorker,
+                        minSlotNum,
+                        maxSlotNum,
+                        getMinTotalCpu(configuration, defaultWorkerResourceSpec, minSlotNum),
+                        getMaxTotalCpu(configuration, defaultWorkerResourceSpec, maxSlotNum),
+                        getMinTotalMem(configuration, defaultWorkerResourceSpec, minSlotNum),
+                        getMaxTotalMem(configuration, defaultWorkerResourceSpec, maxSlotNum),
+                        redundantTaskManagerNum);
+
+        JobManagerOptions.SchedulerType jcfg = configuration.get(JobManagerOptions.SCHEDULER);
+        res.isCustomScheduler = (jcfg == JobManagerOptions.SchedulerType.Custom);
+        return res;
     }
 
     private static CPUResource getMinTotalCpu(
