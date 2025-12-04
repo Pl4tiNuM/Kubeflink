@@ -383,10 +383,15 @@ public class ResourceProfile implements Serializable {
             return true;
         } else if (obj != null && obj.getClass() == ResourceProfile.class) {
             ResourceProfile that = (ResourceProfile) obj;
+
+            LOG.info("[KUBEFLINK] Comparing ResourceProfiles - this.preferredLocation: {}, that.preferredLocation: {}",
+                    preferredLocation, that.preferredLocation);
+
             if (preferredLocation != null
                 && that.preferredLocation != null
                 && !(preferredLocation.contains(that.preferredLocation))
                 && !(that.preferredLocation.contains(preferredLocation))) {
+                LOG.info("[KUBEFLINK] PreferredLocation mismatch - returning false");
                 return false;
             }
             return Objects.equals(this.cpuCores, that.cpuCores)
