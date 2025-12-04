@@ -110,12 +110,11 @@ public class KubernetesResourceManagerDriver
 
     private FlinkPod taskManagerPodTemplate;
 
-    /* Kubeflink Start*/
+    /* Kubeflink start */
     private static final Logger LOG = LoggerFactory.getLogger(KubernetesResourceManagerDriver.class);
+    private static final String TM_CONFIG_PATH = "/tm_config/tms_config.csv";
 
-    private static String TM_CONFIG_PATH = "/tm_config/tms_config.csv";
-
-    private static Map<Integer, Map<String, String>> loadTMConfig() { // Kubeflink
+    private static Map<Integer, Map<String, String>> loadTMConfig() { 
         final Map<Integer, Map<String, String>> config = new HashMap<>();
         final List<String> lines;
 
@@ -126,7 +125,6 @@ public class KubernetesResourceManagerDriver
             LOG.warn("[Kubeflink] Failed to read TM config file", e);
             throw new RuntimeException("[Kubeflink] Failed to read TM config file", e);
         }
-        
 
         for (int i = 0; i < lines.size(); i++) {
             String raw = lines.get(i);
@@ -136,31 +134,70 @@ public class KubernetesResourceManagerDriver
                 LOG.info("[Kubeflink] Skipping header: {}", raw);
                 continue;
             }
-            if (raw == null) continue; // skip empty lines and comments
+            if (raw == null) {
+                continue;
+            }
 
             final String line = raw.trim();
-            
-            if (line.isEmpty() || line.startsWith("#")) continue;
+
+            // Skip empty lines and comments
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue;
+            }
 
             final String[] parts = line.split(",");
-            final int id = Integer.parseInt(parts[0]);
+            if (parts.length < 8) {
+                LOG.warn(
+                        "[Kubeflink] Skipping malformed TM config line (expected 8 columns, got {}): {}",
+                        parts.length,
+                        line);
+                continue;
+            }
+
+            final int id = Integer.parseInt(parts[0].trim());
             final Map<String, String> entry = new HashMap<>();
 
-            final int slots = Integer.parseInt(parts[3]);
-            final String nodeaffinity = parts[4];
+            final String k8sCpu       = parts[1].trim();
+            final String jvmTaskHeap  = parts[2].trim();
+            final String jvmTaskOff   = parts[3].trim();
+            final String jvmNetwork   = parts[4].trim();
+            final String jvmManaged   = parts[5].trim();
+            final String flinkSlots   = parts[6].trim();
+            final String k8sAffinity  = parts[7].trim();
 
-            entry.put("cpu", parts[1]);
-            entry.put("mem", parts[2]);
-            entry.put("slots", parts[3]);
-            entry.put("affinity", parts[4]);
+            // New descriptive keys
+            entry.put("k8s_cpu",        k8sCpu);
+            entry.put("jvm_task_heap",  jvmTaskHeap);
+            entry.put("jvm_task_offheap", jvmTaskOff);
+            entry.put("jvm_network",    jvmNetwork);
+            entry.put("jvm_managed",    jvmManaged);
+            entry.put("flink_slots",    flinkSlots);
+            entry.put("k8s_affinity",   k8sAffinity);
+
+            // Optional legacy aliases for existing code
+            entry.put("cpu",   k8sCpu);
+            entry.put("slots", flinkSlots);
+            // no single "mem" anymore – you should switch callers to use the
+            // jvm_* fields instead of "mem"
 
             config.put(id, entry);
-            LOG.info("[Kubeflink] Loaded TM config id={} cpu={} mem={} slots={} affinity={}", id, parts[1], parts[2], slots, nodeaffinity);
+
+            LOG.info(
+                    "[Kubeflink] Loaded TM config id={} k8s_cpu={} heap={} offheap={} network={} managed={} slots={} affinity={}",
+                    id,
+                    k8sCpu,
+                    jvmTaskHeap,
+                    jvmTaskOff,
+                    jvmNetwork,
+                    jvmManaged,
+                    flinkSlots,
+                    k8sAffinity);
         }
 
         return config;
     } 
-    /* Kubeflink End*/ 
+    /* Kubeflink End */
+
 
     public KubernetesResourceManagerDriver(
             Configuration flinkConfig,
@@ -391,47 +428,112 @@ public class KubernetesResourceManagerDriver
         final String podName =
                 String.format(
                         TASK_MANAGER_POD_FORMAT, clusterId, currentMaxAttemptId, ++currentMaxPodId);
-        
+
+        /* Kubeflink Start */
+        log.info("[Kubeflink] Creating TM Pod with ID {}", currentMaxPodId);
+
+        final Map<Integer, Map<String, String>> tmConfig = loadTMConfig();
+        final Map<String, String> current_config = tmConfig.get((int) currentMaxPodId);
+
+        if (current_config == null) {
+            throw new RuntimeException(
+                    String.format(
+                            "[Kubeflink] No TM config found for id=%d in %s",
+                            currentMaxPodId, TM_CONFIG_PATH));
+        }
+
+        // New CSV fields
+        final double overrideCpu =
+                Double.parseDouble(current_config.get("k8s_cpu"));
+        final int taskHeapMB =
+                Integer.parseInt(current_config.get("jvm_task_heap"));
+        final int taskOffHeapMB =
+                Integer.parseInt(current_config.get("jvm_task_offheap"));
+        final int networkMB =
+                Integer.parseInt(current_config.get("jvm_network"));
+        final int managedMB =
+                Integer.parseInt(current_config.get("jvm_managed"));
+        final int overrideNumSlots =
+                Integer.parseInt(current_config.get("flink_slots"));
+        final String nodeAffinity =
+                current_config.get("k8s_affinity");
+
+        // Convert MB → bytes → MemorySize
+        final MemorySize tmHeapMemory =
+                new MemorySize((long) taskHeapMB * 1024L * 1024L);
+        final MemorySize tmOffHeapMemory =
+                new MemorySize((long) taskOffHeapMB * 1024L * 1024L);
+        final MemorySize tmNetworkMemory =
+                new MemorySize((long) networkMB * 1024L * 1024L);
+        final MemorySize tmManagedMemory =
+                new MemorySize((long) managedMB * 1024L * 1024L);
+
+        // Total TM memory used as the "k8s memory" override (sum of all components)
+        final long totalBytes =
+                tmHeapMemory.getBytes()
+                        + tmOffHeapMemory.getBytes()
+                        + tmNetworkMemory.getBytes()
+                        + tmManagedMemory.getBytes();
+        final MemorySize overrideMem = new MemorySize(totalBytes);
+
+        log.info(
+                "[Kubeflink] podName={} CPU={} heap={} offheap={} network={} managed={} slots={} affinity={}",
+                podName,
+                overrideCpu,
+                tmHeapMemory,
+                tmOffHeapMemory,
+                tmNetworkMemory,
+                tmManagedMemory,
+                overrideNumSlots,
+                nodeAffinity);
+        /* Kubeflink End */
 
         final ContaineredTaskManagerParameters taskManagerParameters =
                 ContaineredTaskManagerParameters.create(flinkConfig, taskExecutorProcessSpec);
 
         final Configuration taskManagerConfig = new Configuration(flinkConfig);
+
+        log.info("[Kubeflink] Original TM Config: {}", taskManagerConfig.toMap().toString());
         taskManagerConfig.set(TaskManagerOptions.TASK_MANAGER_RESOURCE_ID, podName);
+
+        /* Kubeflink Start */
+        // CPU + slots override
+        taskManagerConfig.set(TaskManagerOptions.CPU_CORES, overrideCpu);
+        taskManagerConfig.set(TaskManagerOptions.NUM_TASK_SLOTS, overrideNumSlots);
+
+        // Fine-grained memory from CSV
+        taskManagerConfig.set(TaskManagerOptions.TASK_HEAP_MEMORY, tmHeapMemory);
+        taskManagerConfig.set(TaskManagerOptions.TASK_OFF_HEAP_MEMORY, tmOffHeapMemory);
+        taskManagerConfig.set(TaskManagerOptions.MANAGED_MEMORY_SIZE, tmManagedMemory);
+        taskManagerConfig.set(TaskManagerOptions.NETWORK_MEMORY_MIN, tmNetworkMemory);
+        taskManagerConfig.set(TaskManagerOptions.NETWORK_MEMORY_MAX, tmNetworkMemory);
+        /* Kubeflink End */
+
+        log.info("[Kubeflink] Final TM Config: {}", taskManagerConfig.toMap().toString());
 
         final String dynamicProperties =
                 BootstrapTools.getDynamicPropertiesAsString(flinkClientConfig, taskManagerConfig);
-        final String jvmMemOpts =
+        log.info("[Kubeflink] Dynamic Properties: {}", dynamicProperties);
+
+        String jvmMemOpts =
                 ProcessMemoryUtils.generateJvmParametersStr(taskExecutorProcessSpec);
 
-        /* Kubeflink Start */
-        log.info("Properties: {}", dynamicProperties);
-        log.info("[Kubeflink] Creating TM Pod with ID {}", currentMaxPodId);
-        final Map<Integer, Map<String, String>> tmConfig = loadTMConfig();
-
-        final Map<String, String> current_config = tmConfig.get((int)currentMaxPodId);
-
-        Double overrideCpu = Double.parseDouble(current_config.get("cpu"));
-        MemorySize overrideMem = MemorySize.parse(current_config.get("mem"));
-        Integer overrideNumSlots = Integer.parseInt(current_config.get("slots"));
-
-        log.info("[Kubeflink] podName={}: CPU={}, MEM={} SLOTS={}", podName, overrideCpu, overrideMem, overrideNumSlots);
-        /* Kubeflink End */
-
         return new KubernetesTaskManagerParameters(
-                flinkConfig,
+                taskManagerConfig,
                 podName,
                 dynamicProperties,
                 jvmMemOpts,
                 taskManagerParameters,
                 ExternalResourceUtils.getExternalResourceConfigurationKeys(
                         flinkConfig,
-                        KubernetesConfigOptions.EXTERNAL_RESOURCE_KUBERNETES_CONFIG_KEY_SUFFIX),
+                        KubernetesConfigOptions
+                                .EXTERNAL_RESOURCE_KUBERNETES_CONFIG_KEY_SUFFIX),
                 blockedNodes,
-                overrideCpu,    // Kubeflink
-                overrideMem,    // Kubeflink
-                overrideNumSlots);   // Kubeflink
+                overrideCpu,    // Kubeflink: K8s CPU limit/request
+                overrideMem,    // Kubeflink: total K8s memory
+                overrideNumSlots); // Kubeflink: TM slots
     }
+
 
     private void handlePodEventsInMainThread(List<KubernetesPod> pods, PodEvent podEvent) {
         getMainThreadExecutor()
