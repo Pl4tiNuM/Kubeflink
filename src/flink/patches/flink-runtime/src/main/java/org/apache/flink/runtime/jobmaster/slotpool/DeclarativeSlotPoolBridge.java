@@ -210,6 +210,11 @@ public class DeclarativeSlotPoolBridge extends DeclarativeSlotPoolService implem
             return;
         }
 
+        log.info("[KUBEFLINK] newSlotsAreAvailable newSlots_size={}", newSlots.size());
+        for (PhysicalSlot slot : newSlots) {
+            log.info("[KUBEFLINK] newSlotsAreAvailable slot={}", slot);
+        }
+
         if (slotBatchAllocatable) {
             newSlotsAvailableForSlotBatchAllocatable(newSlots);
         } else {
@@ -268,6 +273,7 @@ public class DeclarativeSlotPoolBridge extends DeclarativeSlotPoolService implem
             final PhysicalSlot slot = match.getSlot();
 
             log.debug("Matched pending request {} with slot {}.", pendingRequest, slot);
+            log.info("[KUBEFLINK] Matched pending request {} with slot {}.", pendingRequest, slot);
 
             Preconditions.checkNotNull(
                     pendingRequests.remove(pendingRequest.getSlotRequestId()),
