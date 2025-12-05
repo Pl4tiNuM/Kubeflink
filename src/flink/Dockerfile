@@ -31,7 +31,7 @@ RUN ./mvnw clean package -DskipTests -Djdk17 -Pjava17-target
 
 FROM flink-base AS flink-custom
 
-COPY patches/flink-kubernetes/src/main/java/org/apache/flink/kubernetes/KubernetesResourceManagerDriver.java /flink/flink-kubernetes/src/main/java/org/apache/flink/kubernetes/KubernetesResourceManagerDriver.java
+COPY patches/ /flink/
 
 RUN mvn spotless:apply
 RUN ./mvnw clean package -DskipTests -Dcheckstyle.skip -Drat.skip=true -Djdk17 -Pjava17-target  -pl flink-runtime,flink-kubernetes -am
