@@ -46,10 +46,12 @@ public enum SimpleRequestSlotMatchingStrategy implements RequestSlotMatchingStra
 
         JobManagerOptions.SchedulerType jcfg = null;
         try {
-            String flinkHome = System.getenv("FLINK_CUSTOM_HOME");
-            String fpath = flinkHome + "/scripts/";
-            log.info("[KUBEFLINK] SimpleRequestSlotMatchingStrategy  workdir {}", fpath);
-            Configuration cfgs = GlobalConfiguration.loadConfiguration(fpath);
+            // String flinkHome = System.getenv("FLINK_CUSTOM_HOME");
+            // String fpath = flinkHome + "/scripts/";
+            // log.info("[KUBEFLINK] SimpleRequestSlotMatchingStrategy  workdir {}", fpath);
+            // Configuration cfgs = GlobalConfiguration.loadConfiguration(fpath);
+            Configuration cfgs = GlobalConfiguration.loadConfiguration();  // no path argument
+            // jcfg = cfgs.get(JobManagerOptions.SCHEDULER);
             jcfg = cfgs.get(JobManagerOptions.SCHEDULER);
             log.info(
                     "[KUBEFLINK] SimpleRequestSlotMatchingStrategy  JobManagerOptions.SchedulerType={}",
@@ -80,18 +82,38 @@ public enum SimpleRequestSlotMatchingStrategy implements RequestSlotMatchingStra
                         pendingRequest.getSlotRequestId().getPreferredLocation(),
                         slot.getTaskManagerLocation());
                 boolean matchCondition;
-                if (isCustomScheduler)
-                    matchCondition =
-                            slot.getTaskManagerLocation()
-                                    .toString()
-                                    .contains(
-                                            pendingRequest
-                                                    .getSlotRequestId()
-                                                    .getPreferredLocation());
-                else
-                    matchCondition =
-                            slot.getResourceProfile()
-                                    .isMatching(pendingRequest.getResourceProfile());
+                if (isCustomScheduler){
+                //     matchCondition =
+                //             slot.getTaskManagerLocation()
+                //                     .toString()
+                //                     .contains(
+                //                             pendingRequest
+                //                                     .getSlotRequestId()
+                //                                     .getPreferredLocation());
+                // else
+                //     matchCondition =
+                //             slot.getResourceProfile()
+                //                     .isMatching(pendingRequest.getResourceProfile());
+                    String desired = pendingRequest.getSlotRequestId().getPreferredLocation();
+
+                    // e.g. resource-id string: "flink-test2-taskmanager-1-1"
+                    String tmId = slot.getTaskManagerLocation().getResourceID().toString();
+
+                    log.info(
+                        "[KUBEFLINK] SimpleRequestSlotMatchingStrategy custom match: desired={} tmLocation={}",
+                        desired, slot.getTaskManagerLocation());
+
+                    if (desired == null || desired.isEmpty()) {
+                        matchCondition = slot.getResourceProfile()
+                                .isMatching(pendingRequest.getResourceProfile());
+                    } else {
+                        // strict equality on the TM id instead of toString().contains(...)
+                        matchCondition = tmId.equals(desired);
+                    }
+                } else {
+                    matchCondition = slot.getResourceProfile()
+                            .isMatching(pendingRequest.getResourceProfile());
+                }
 
                 if (matchCondition) {
                     resultingMatches.add(RequestSlotMatch.createFor(pendingRequest, slot));

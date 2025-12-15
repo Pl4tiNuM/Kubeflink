@@ -100,6 +100,8 @@ public class FineGrainedSlotManager implements SlotManager {
 
     private final Set<JobID> unfulfillableJobs = new HashSet<>();
 
+    private final boolean isCustomScheduler;
+
     /** ResourceManager's id. */
     @Nullable private ResourceManagerId resourceManagerId;
 
@@ -134,6 +136,8 @@ public class FineGrainedSlotManager implements SlotManager {
             ResourceAllocationStrategy resourceAllocationStrategy) {
 
         this.scheduledExecutor = Preconditions.checkNotNull(scheduledExecutor);
+
+        this.isCustomScheduler = slotManagerConfiguration.isCustomScheduler();
 
         Preconditions.checkNotNull(slotManagerConfiguration);
         this.taskManagerTimeout = slotManagerConfiguration.getTaskManagerTimeout();

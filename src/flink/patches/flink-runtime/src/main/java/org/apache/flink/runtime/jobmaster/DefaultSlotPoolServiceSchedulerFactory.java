@@ -226,6 +226,8 @@ public final class DefaultSlotPoolServiceSchedulerFactory
                                 rpcTimeout,
                                 slotIdleTimeout,
                                 batchSlotTimeout,
+                                slotRequestMaxInterval,
+                                slotBatchAllocatable,
                                 getRequestSlotMatchingStrategy(configuration, jobType));
                 break;
             default:

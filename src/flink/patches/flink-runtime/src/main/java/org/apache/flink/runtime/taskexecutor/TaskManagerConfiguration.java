@@ -106,9 +106,26 @@ public class TaskManagerConfiguration implements TaskManagerRuntimeInfo {
         this.tmpWorkingDirectory = tmpWorkingDirectory;
         this.retryingRegistrationConfiguration = retryingRegistrationConfiguration;
 
-        LOG.info("[KUBEFLINK] Setting preferredLocation to: {}", this.taskManagerExternalAddress);
-        this.defaultSlotResourceProfile.setPreferredLocation(this.taskManagerExternalAddress);
-        this.totalResourceProfile.setPreferredLocation(this.taskManagerExternalAddress);
+        LOG.info("[KUBEFLINK] TaskManagerConfiguration: dumping configuration");
+        for (String key : configuration.keySet()) {
+            LOG.info("[KUBEFLINK]   {} = {}", key, configuration.getString(key, "<null>"));
+        }
+
+        String tmIdentity = configuration.getString("taskmanager.resource-id", null);
+
+
+
+        // 2) Fallback: if not configured, use externalAddress (IP) as before
+        if (tmIdentity == null || tmIdentity.isEmpty()) {
+            tmIdentity = this.taskManagerExternalAddress;
+        }
+
+        LOG.info("[KUBEFLINK] Setting preferredLocation to: {}", tmIdentity);
+        // this.defaultSlotResourceProfile.setPreferredLocation(this.taskManagerExternalAddress);
+        // this.totalResourceProfile.setPreferredLocation(this.taskManagerExternalAddress);
+            // 3) Store the identity as the preferredLocation on both profiles
+        this.defaultSlotResourceProfile.setPreferredLocation(tmIdentity);
+        this.totalResourceProfile.setPreferredLocation(tmIdentity);
     }
 
     public int getNumberSlots() {

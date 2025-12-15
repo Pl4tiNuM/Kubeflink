@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -16,11 +17,9 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 package org.apache.flink.runtime.scheduler;
-
+import java.time.Duration;
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.failure.FailureEnricher;
 import org.apache.flink.runtime.checkpoint.CheckpointRecoveryFactory;
@@ -55,6 +54,7 @@ import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.concurrent.FutureUtils;
 import org.apache.flink.util.concurrent.ScheduledExecutor;
+import org.apache.flink.runtime.scheduler.adaptivebatch.ExecutionPlanSchedulingContext;
 
 import org.slf4j.Logger;
 
@@ -145,9 +145,10 @@ public class CustomScheduler extends SchedulerBase implements SchedulerOperation
             final Collection<FailureEnricher> failureEnrichers,
             final ExecutionGraphFactory executionGraphFactory,
             final ShuffleMaster<?> shuffleMaster,
-            final Time rpcTimeout,
+            final Duration rpcTimeout,
             final VertexParallelismStore vertexParallelismStore,
-            final ExecutionDeployer.Factory executionDeployerFactory)
+            final ExecutionDeployer.Factory executionDeployerFactory,
+            ExecutionPlanSchedulingContext executionPlanSchedulingContext)
             throws Exception {
 
         super(
@@ -163,7 +164,8 @@ public class CustomScheduler extends SchedulerBase implements SchedulerOperation
                 mainThreadExecutor,
                 jobStatusListener,
                 executionGraphFactory,
-                vertexParallelismStore);
+                vertexParallelismStore,
+                executionPlanSchedulingContext);
 
         this.log = log;
 
@@ -221,7 +223,7 @@ public class CustomScheduler extends SchedulerBase implements SchedulerOperation
                         executionSlotAllocator,
                         executionOperations,
                         executionVertexVersioner,
-                        rpcTimeout,
+                Duration.ofMillis(rpcTimeout.toMillis()), // Assuming conversion is needed
                         this::startReserveAllocation,
                         mainThreadExecutor);
     }
@@ -233,6 +235,12 @@ public class CustomScheduler extends SchedulerBase implements SchedulerOperation
     @Override
     protected long getNumberOfRestarts() {
         return executionFailureHandler.getNumberOfRestarts();
+    }
+
+    @Override
+    public long getNumberOfRescales() {
+        // Return 0 or the appropriate value for your scheduler
+        return 0L;
     }
 
     @Override
@@ -485,7 +493,7 @@ public class CustomScheduler extends SchedulerBase implements SchedulerOperation
             String flinkHome = System.getenv("FLINK_CUSTOM_HOME");
             String fpath = flinkHome + "/scripts/";
             Path filePath = Path.of(fpath + "schedulercfg");
-            log.info("mylog    CustomScheduler  workdir FLINK_CUSTOM_HOME  {}", fpath);
+            log.info("[KUBEFLINKs] CustomScheduler  workdir FLINK_CUSTOM_HOME  {}", fpath);
             scfgtxt = Files.readString(filePath);
         } catch (IOException e) {
             e.printStackTrace();
@@ -505,6 +513,10 @@ public class CustomScheduler extends SchedulerBase implements SchedulerOperation
             }
 
             for (ExecutionVertexID evid : verticesToDeploy) {
+                log.info(
+                        "[KUBEFLINK] customscheduler allocateSlots verticesToDeploy {} {} ",
+                        evid,
+                        getExecutionVertex(evid).getTaskNameWithSubtaskIndex());
                 String tmid = "";
                 for (String sEVST : mapEVST2TMIDL.keySet()) {
                     if (getExecutionVertex(evid).getTaskNameWithSubtaskIndex().contains(sEVST)) {
@@ -516,12 +528,12 @@ public class CustomScheduler extends SchedulerBase implements SchedulerOperation
                 // map ExecutionVertexID to IP of task manager (custom assignments
 
                 log.info(
-                        "mylog customscheduler allocateSlots {} {} {}",
+                        "[KUBEFLINK] customscheduler allocateSlots {} {} {}",
                         evid,
                         getExecutionVertex(evid).getTaskNameWithSubtaskIndex(),
                         tmid);
             }
-            log.info("mylog customscheduler allocateSlots mapEVID2TMID {} ", mapEVID2TMID);
+            log.info("[KUBEFLINK] customscheduler allocateSlots mapEVID2TMID {} ", mapEVID2TMID);
         }
 
         this.executionSlotAllocator.setmapEVID2TMID(mapEVID2TMID);

@@ -34,7 +34,16 @@ FROM flink-base AS flink-custom
 COPY patches/ /flink/
 
 RUN mvn spotless:apply
-RUN ./mvnw clean package -DskipTests -Dcheckstyle.skip -Drat.skip=true -Djdk17 -Pjava17-target  -pl flink-runtime,flink-kubernetes -am
+# RUN ./mvnw clean package -DskipTests -Dcheckstyle.skip -Drat.skip=true -Djdk17 -Pjava17-target  -pl flink-runtime,flink-kubernetes -am
+
+RUN ./mvnw clean package \
+  -DskipTests \
+  -Dcheckstyle.skip \
+  -Drat.skip=true \
+  -Djdk17 \
+  -Pjava17-target \
+  -pl flink-dist,flink-core,flink-runtime,flink-kubernetes \
+  -am
 
 FROM flink:2.1.0-java17
 
@@ -46,10 +55,32 @@ RUN rm -rf /opt/flink/*
 # 3. Copy your custom-built Flink distribution from the 'build-target'
 #    directory on your host into the '/opt/flink' directory inside the image.
 #    The 'build-target' directory was created by the 'mvn install' command.
-COPY --from=flink-custom /flink/build-target/ /opt/flink/
+# COPY --from=flink-custom /flink/build-target/ /opt/flink/
+
+COPY --from=flink-custom \
+  /flink/flink-dist/target/flink-2.1.0-bin/flink-2.1.0/ \
+  /opt/flink/
+
+
+# TODO: remove in the future, only for testing
+# Set the custom scheduler in the Flink configuration
+RUN echo "jobmanager.scheduler: Custom" >> /opt/flink/conf/config.yaml
 
 # 4. The official image runs as a non-root user named 'flink'. The files
 #    we copied in the previous step are owned by 'root' by default.
 #    We need to change the ownership so the 'flink' user has the necessary
 #    permissions to execute the Flink scripts and binaries.
 RUN chown -R flink:flink /opt/flink
+
+# Default, matches what your Java scheduler uses
+ENV FLINK_CUSTOM_HOME=/opt/flink
+
+# Copy pre-start script into the image
+COPY scripts/translate_pod_to_IP.sh /opt/flink/scripts/translate_pod_to_IP.sh
+RUN chmod +x /opt/flink/scripts/translate_pod_to_IP.sh
+
+RUN mkdir -p /opt/flink/scripts
+
+
+# Wrap the original entrypoint so our script runs first
+ENTRYPOINT ["/opt/flink/scripts/translate_pod_to_IP.sh"]

@@ -262,6 +262,10 @@ public class ResourceProfile implements Serializable {
         this.preferredLocation = preferredLocation;
     }
 
+    public static ResourceProfile createNewResourceProfile() {
+        return new ResourceProfile();
+    }
+
     /**
      * Get the extended resources.
      *
@@ -374,12 +378,18 @@ public class ResourceProfile implements Serializable {
         result = 31 * result + Objects.hashCode(managedMemory);
         result = 31 * result + Objects.hashCode(networkMemory);
         result = 31 * result + extendedResources.hashCode();
+        result = 31 * result + Objects.hashCode(preferredLocation);
         return result;
     }
 
     @Override
     public boolean equals(Object obj) {
+
         if (obj == this) {
+            if (obj != null || this != null){
+                LOG.info("[KUBEFLINK] Comparing ResourceProfiles - this.preferredLocation: {}, obj.preferredLocation: {}",
+                    preferredLocation, preferredLocation);
+            }
             return true;
         } else if (obj != null && obj.getClass() == ResourceProfile.class) {
             ResourceProfile that = (ResourceProfile) obj;
@@ -516,22 +526,35 @@ public class ResourceProfile implements Serializable {
 
     @Override
     public String toString() {
+        String res = "";
         if (this.equals(UNKNOWN)) {
-            return "ResourceProfile{UNKNOWN}";
+            // return "ResourceProfile{UNKNOWN}";
+            res += "ResourceProfile{UNKNOWN}";
         }
 
         if (this.equals(ANY)) {
-            return "ResourceProfile{ANY}";
+            // return "ResourceProfile{ANY}";
+            res += "ResourceProfile{ANY}";
         }
 
-        return "ResourceProfile{"
-                + getResourceString()
-                + (extendedResources.isEmpty()
-                        ? ""
-                        : (", "
-                                + ExternalResourceUtils.generateExternalResourcesString(
-                                        extendedResources.values())))
-                + '}';
+        res +=
+            "ResourceProfile{"
+                    + getResourceString()
+                    + (extendedResources.isEmpty()
+                            ? ""
+                            : (", "
+                                    + ExternalResourceUtils.generateExternalResourcesString(
+                                            extendedResources.values())))
+                    + '}';
+        // return "ResourceProfile{"
+        //         + getResourceString()
+        //         + (extendedResources.isEmpty()
+        //                 ? ""
+        //                 : (", "
+        //                         + ExternalResourceUtils.generateExternalResourcesString(
+        //                                 extendedResources.values())))
+        //         + '}';
+        return res;
     }
 
     private String getResourceString() {

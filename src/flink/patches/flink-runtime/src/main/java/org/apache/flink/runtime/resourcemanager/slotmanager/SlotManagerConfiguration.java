@@ -50,7 +50,7 @@ public class SlotManagerConfiguration {
     private final MemorySize minTotalMem;
     private final MemorySize maxTotalMem;
     private final int redundantTaskManagerNum;
-    public boolean isCustomScheduler = false;
+    public boolean isCustomScheduler;
 
     public SlotManagerConfiguration(
             Duration taskManagerRequestTimeout,
@@ -87,6 +87,7 @@ public class SlotManagerConfiguration {
         this.maxTotalMem = maxTotalMem;
         Preconditions.checkState(redundantTaskManagerNum >= 0);
         this.redundantTaskManagerNum = redundantTaskManagerNum;
+        this.isCustomScheduler = false;
     }
 
     private void checkSlotNumResource(
@@ -199,6 +200,10 @@ public class SlotManagerConfiguration {
         return numSlotsPerWorker;
     }
 
+    public boolean isCustomScheduler() {
+        return isCustomScheduler;
+    }
+
     public int getMinSlotNum() {
         return minSlotNum;
     }
@@ -274,7 +279,7 @@ public class SlotManagerConfiguration {
                         taskManagerTimeout,
                         requirementCheckDelay,
                         declareNeededResourceDelay,
-                        waitResultConsumedBeforeRelease,
+                        // waitResultConsumedBeforeRelease,
                         taskManagerLoadBalanceMode,
                         defaultWorkerResourceSpec,
                         numSlotsPerWorker,

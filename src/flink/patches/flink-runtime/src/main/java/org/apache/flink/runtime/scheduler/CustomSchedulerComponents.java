@@ -16,9 +16,10 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 package org.apache.flink.runtime.scheduler;
 
+
+import java.time.Duration;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
@@ -75,7 +76,7 @@ public class CustomSchedulerComponents {
             final boolean isApproximateLocalRecoveryEnabled,
             final Configuration jobMasterConfiguration,
             final SlotPool slotPool,
-            final Time slotRequestTimeout) {
+            final Duration slotRequestTimeout) {
 
         checkArgument(
                 !isApproximateLocalRecoveryEnabled,
@@ -88,7 +89,7 @@ public class CustomSchedulerComponents {
             final JobType jobType,
             final Configuration jobMasterConfiguration,
             final SlotPool slotPool,
-            final Time slotRequestTimeout) {
+            final Duration slotRequestTimeout) {
 
         final SlotSelectionStrategy slotSelectionStrategy =
                 SlotSelectionStrategyUtils.selectSlotSelectionStrategy(
@@ -103,7 +104,8 @@ public class CustomSchedulerComponents {
                         physicalSlotProvider,
                         jobType == JobType.STREAMING,
                         bulkChecker,
-                        slotRequestTimeout);
+                        slotRequestTimeout,
+                        new PerExecutionVertexSlotSharingStrategy.Factory());
         return new CustomSchedulerComponents(
                 new PipelinedRegionSchedulingStrategy.Factory(),
                 bulkChecker::start,

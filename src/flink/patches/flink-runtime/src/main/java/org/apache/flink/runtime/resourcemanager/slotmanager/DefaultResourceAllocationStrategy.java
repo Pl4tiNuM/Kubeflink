@@ -90,6 +90,8 @@ public class DefaultResourceAllocationStrategy implements ResourceAllocationStra
     /** Defines the number of redundant task managers. */
     private final int redundantTaskManagerNum;
 
+    private final boolean isCustomScheduler;
+
     public DefaultResourceAllocationStrategy(
             ResourceProfile totalResourceProfile,
             int numSlotsPerWorker,
@@ -101,6 +103,7 @@ public class DefaultResourceAllocationStrategy implements ResourceAllocationStra
             boolean isCustomScheduler) {
         this.totalResourceProfile = totalResourceProfile;
         this.numSlotsPerWorker = numSlotsPerWorker;
+        this.isCustomScheduler = isCustomScheduler;
         this.defaultSlotResourceProfile =
                 SlotManagerUtils.generateDefaultSlotResourceProfile(
                         totalResourceProfile, numSlotsPerWorker);
@@ -352,6 +355,12 @@ public class DefaultResourceAllocationStrategy implements ResourceAllocationStra
         ResourceProfile newAddedResourceProfile = ResourceProfile.ZERO;
 
         for (ResourceRequirement missingResource : unfulfilledRequirements) {
+            if (isCustomScheduler &&
+                missingResource.getResourceProfile().getPreferredLocation() != null) {
+                // For location-sensitive custom scheduler, do NOT allocate from pending workers.
+                // Just skip: numUnfulfilled stays >0, so SlotManager still sees missing resources.
+                continue;
+            }
             // for this strategy, all pending resources should have the same default slot resource
             final ResourceProfile effectiveProfile =
                     getEffectiveResourceProfile(
@@ -510,7 +519,7 @@ public class DefaultResourceAllocationStrategy implements ResourceAllocationStra
                     getEffectiveResourceProfile(requirement, defaultSlotProfile);
             effectiveProfile.setPreferredLocation(requirement.getPreferredLocation());
             LOG.info(
-                    "mylog    DefaultResourceAllocationStrategy    tryAllocateSlotForJobWithPreferredLocation    totalProfile={} effectiveProfile={}",
+                    "[KUBECONFIG]    DefaultResourceAllocationStrategy    tryAllocateSlotForJobWithPreferredLocation    totalProfile={} effectiveProfile={}",
                     totalProfile,
                     effectiveProfile);
             if (totalProfile

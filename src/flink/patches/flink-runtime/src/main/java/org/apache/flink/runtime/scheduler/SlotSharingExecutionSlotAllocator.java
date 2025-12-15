@@ -101,11 +101,12 @@ class SlotSharingExecutionSlotAllocator implements ExecutionSlotAllocator {
         this.sharedSlots = new IdentityHashMap<>();
 
         this.slotProvider.disableBatchSlotRequestTimeoutCheck();
-
-        public void setmapEVID2TMID(Map<ExecutionVertexID, String> _mapEVID2TMID) {
-                this.mapEVID2TMID = _mapEVID2TMID;
-        }
     }
+
+    public void setmapEVID2TMID(Map<ExecutionVertexID, String> _mapEVID2TMID) {
+        this.mapEVID2TMID = _mapEVID2TMID;
+    }
+
 
     @Override
     public Map<ExecutionAttemptID, ExecutionSlotAssignment> allocateSlotsFor(
@@ -274,30 +275,42 @@ class SlotSharingExecutionSlotAllocator implements ExecutionSlotAllocator {
                 LOG.info("[KUBEFLINK] getOrAllocateSharedSlot group.getExecutionVertexIds {}", evid);
             }
             ExecutionVertexID groupevid = group.getExecutionVertexIds().iterator().next();
+            String preferredLocation = mapEVID2TMID.getOrDefault(groupevid, "xxxxxxxx");
             LOG.info(
                         "[KUBEFLINK] SlotSharingExecutionSlotAllocator allocating shared slot for group {} on TM {}",
                         group,
-                        mapEVID2TMID.get(groupevid));
+                        preferredLocation);
+
             SlotRequestId physicalSlotRequestId = new SlotRequestId();
 
             physicalSlotRequestId.setPreferredLocation(
-                    this.mapEVID2TMID.getOrDefault(groupevid, "xxxxxxxx"));
-
+                    preferredLocation);
             // identify which slot mathcing strategy used
-            boolean locationMatchingStrategy =
-                    !physicalSlotRequestId.getPreferredLocation().equals("xxxxxxxx");
 
-            ResourceProfile physicalSlotResourceProfile = getPhysicalSlotResourceProfile(group);
+            boolean locationMatchingStrategy = !preferredLocation.equals("xxxxxxxx");
+
+            ResourceProfile baseProfile = getPhysicalSlotResourceProfile(group);
+            ResourceProfile physicalSlotResourceProfile;
+
+        //     ResourceProfile physicalSlotResourceProfile = getPhysicalSlotResourceProfile(group);
 
             if (locationMatchingStrategy) {
                 LOG.info("[KUBEFLINK] getOrAllocateSharedSlot locationMatchingStrategy");
-                if (physicalSlotResourceProfile.equals(ResourceProfile.UNKNOWN)
-                        || physicalSlotResourceProfile.equals(ResourceProfile.ANY)) {
+                if (baseProfile.equals(ResourceProfile.UNKNOWN)
+                        || baseProfile.equals(ResourceProfile.ANY)) {
                     physicalSlotResourceProfile = ResourceProfile.createNewResourceProfile();
-                }
+                } else {
                 // insert preferred location
+                        physicalSlotResourceProfile =
+                                ResourceProfile.newBuilder(baseProfile).build();
+                //     physicalSlotResourceProfile.setPreferredLocation(
+                //     physicalSlotRequestId.getPreferredLocation());
+                }
                 physicalSlotResourceProfile.setPreferredLocation(
-                        physicalSlotRequestId.getPreferredLocation());
+                        preferredLocation);
+            } else {
+                LOG.info("[KUBEFLINK] getOrAllocateSharedSlot default matching strategy");
+                physicalSlotResourceProfile = baseProfile;
             }
 
             LOG.info(

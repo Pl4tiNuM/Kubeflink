@@ -58,8 +58,8 @@ class FineGrainedSlotManagerDefaultResourceAllocationStrategyITCase
                         slotManagerConfiguration.getTaskManagerTimeout(),
                         slotManagerConfiguration.getRedundantTaskManagerNum(),
                         slotManagerConfiguration.getMinTotalCpu(),
-                        slotManagerConfiguration.getMinTotalMem()),
-                        false);
+                        slotManagerConfiguration.getMinTotalMem(),
+                        false));
     }
 
     /**

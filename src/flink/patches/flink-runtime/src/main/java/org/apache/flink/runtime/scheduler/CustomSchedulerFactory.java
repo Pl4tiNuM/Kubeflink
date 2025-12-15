@@ -19,6 +19,7 @@
 
 package org.apache.flink.runtime.scheduler;
 
+import java.time.Duration;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
@@ -42,6 +43,10 @@ import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.util.concurrent.ScheduledExecutorServiceAdapter;
+import org.apache.flink.streaming.api.graph.ExecutionPlan;
+import org.apache.flink.streaming.api.graph.StreamGraph;
+import org.apache.flink.util.FlinkException;
+
 
 import org.slf4j.Logger;
 
@@ -52,23 +57,27 @@ import java.util.concurrent.ScheduledExecutorService;
 import static org.apache.flink.runtime.scheduler.CustomSchedulerComponents.createSchedulerComponents;
 import static org.apache.flink.runtime.scheduler.SchedulerBase.computeVertexParallelismStore;
 
+import org.apache.flink.runtime.scheduler.adaptivebatch.NonAdaptiveExecutionPlanSchedulingContext;
+
+
 /** Factory for {@link CustomScheduler}. */
 public class CustomSchedulerFactory implements SchedulerNGFactory {
 
     @Override
     public SchedulerNG createInstance(
             final Logger log,
-            final JobGraph jobGraph,
+        //     final JobGraph jobGraph,
+            final ExecutionPlan executionPlan,
             final Executor ioExecutor,
             final Configuration jobMasterConfiguration,
             final SlotPoolService slotPoolService,
             final ScheduledExecutorService futureExecutor,
             final ClassLoader userCodeLoader,
             final CheckpointRecoveryFactory checkpointRecoveryFactory,
-            final Time rpcTimeout,
+            final Duration rpcTimeout,
             final BlobWriter blobWriter,
             final JobManagerJobMetricGroup jobManagerJobMetricGroup,
-            final Time slotRequestTimeout,
+            final Duration slotRequestTimeout,
             final ShuffleMaster<?> shuffleMaster,
             final JobMasterPartitionTracker partitionTracker,
             final ExecutionDeploymentTracker executionDeploymentTracker,
@@ -79,6 +88,16 @@ public class CustomSchedulerFactory implements SchedulerNGFactory {
             final Collection<FailureEnricher> failureEnrichers,
             final BlocklistOperations blocklistOperations)
             throws Exception {
+
+        JobGraph jobGraph;
+        if (executionPlan instanceof JobGraph) {
+            jobGraph = (JobGraph) executionPlan;
+        } else if (executionPlan instanceof StreamGraph) {
+            jobGraph = ((StreamGraph) executionPlan).getJobGraph(userCodeLoader);
+        } else {
+            throw new FlinkException(
+                    "Unsupported execution plan " + executionPlan.getClass().getCanonicalName());
+        }
 
         final SlotPool slotPool =
                 slotPoolService
@@ -97,9 +116,9 @@ public class CustomSchedulerFactory implements SchedulerNGFactory {
                         slotRequestTimeout);
         final RestartBackoffTimeStrategy restartBackoffTimeStrategy =
                 RestartBackoffTimeStrategyFactoryLoader.createRestartBackoffTimeStrategyFactory(
-                                jobGraph.getSerializedExecutionConfig()
-                                        .deserializeValue(userCodeLoader)
-                                        .getRestartStrategy(),
+                                // jobGraph.getSerializedExecutionConfig()
+                                //         .deserializeValue(userCodeLoader)
+                                //         .getRestartStrategy(),
                                 jobGraph.getJobConfiguration(),
                                 jobMasterConfiguration,
                                 jobGraph.isCheckpointingEnabled())
@@ -155,7 +174,8 @@ public class CustomSchedulerFactory implements SchedulerNGFactory {
                 shuffleMaster,
                 rpcTimeout,
                 computeVertexParallelismStore(jobGraph),
-                new DefaultExecutionDeployer.Factory());
+                new DefaultExecutionDeployer.Factory(),
+                NonAdaptiveExecutionPlanSchedulingContext.INSTANCE);
     }
 
     @Override
