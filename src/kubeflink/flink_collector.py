@@ -6,8 +6,8 @@ from typing import Dict
 from structs import FlinkApp, FlinkTask, FlinkVertex
 
 class FlinkCollector:
-    def __init__(self):
-        self.kc = KubeCollector()
+    def __init__(self, kc: KubeCollector = None):
+        self.kc = kc
         self.running_apps: Dict[str, FlinkApp] = {}
         self.completed_apps: Dict[str, FlinkApp] = {}
 
@@ -29,14 +29,16 @@ class FlinkCollector:
                 self.running_apps[name] = FlinkApp(name=name, 
                                                    namespace=service.namespace,
                                                    url=f"http://{service.name}.{service.namespace}.svc:8081")
+            
+            logging.info(f"[FlinkCollector] Updating Flink service: {service.name} in namespace {service.namespace}")
+            jobs = self.get_jobs(self.running_apps[name].url)
+            if jobs is not None:
+                logging.info(f"[FlinkCollector] Found {len(jobs)} running jobs in Flink service: {service.name}")
+                job_id = jobs[0]['jid']
+                self.running_apps[name].job_id = job_id
+                self.running_apps[name].vertices = self.get_vertices(self.running_apps[name].url, self.running_apps[name].job_id)
             else:
-                logging.info(f"[FlinkCollector] Updating Flink service: {service.name} in namespace {service.namespace}")
-
-                jobs = self.get_jobs(self.running_apps[name].url)
-                if jobs is not None:
-                    job_id = jobs[0]['jid']
-                    self.running_apps[name].job_id = job_id
-                    self.running_apps[name].vertices = self.get_vertices(self.running_apps[name].url, self.running_apps[name].job_id)
+                logging.info(f"[FlinkCollector] No running jobs found in Flink service: {service.name}. Marking application as completed.")
 
         return self.running_apps
 
@@ -74,13 +76,13 @@ class FlinkCollector:
                                             status=vertex.get('status', 'UNKNOWN'),
                                             parallelism=vertex.get('parallelism', 1),
                                         )
-                tmp_dict[vertex['id']].tasks = self.get_vertex_tasks(svc_url, job_id, vertex['id'])
+                tmp_dict[vertex['id']].tasks = self.get_tasks(svc_url, job_id, vertex['id'])
                 logging.info(f"[FlinkCollector] Fetched vertex {vertex.get('name')} with {len(tmp_dict[vertex['id']].tasks)} tasks.")
                 logging.info(f"[FlinkCollector] Vertex details: {tmp_dict[vertex['id']]}")
             return tmp_dict
 
             
-    def get_vertex_tasks(self, svc_url, job_id, vertex_id) -> Dict[str, FlinkTask]:
+    def get_tasks(self, svc_url, job_id, vertex_id) -> Dict[str, FlinkTask]:
         """
         Fetches the list of tasks for a given job and their assigned task managers.
         Returns a list of dicts with task info and assigned task manager.
@@ -99,7 +101,10 @@ class FlinkCollector:
                 tasks[task_id] = FlinkTask(
                     id=task_id,
                     status=task.get('status', 'UNKNOWN'),
-                    taskmanager=task.get('taskmanager-id', 'UNKNOWN')
+                    timestamp_start=task.get('start-time', 0),
+                    timestamp_end=task.get('end-time', 0),
+                    taskmanager_id=task.get('taskmanager-id', 'UNKNOWN'),
+                    # metrics=
                 )
             logging.info(f"[FlinkCollector] Fetched {len(tasks)} tasks for vertex id {vertex_id}.")
             logging.info(f"[FlinkCollector] Tasks details: {tasks}")
