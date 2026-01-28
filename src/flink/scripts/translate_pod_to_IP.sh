@@ -6,6 +6,13 @@ CFG="${FLINK_CUSTOM_HOME:-/opt/flink}/scripts/schedulercfg_raw"
 CFG_OUT="${FLINK_CUSTOM_HOME:-/opt/flink}/scripts/schedulercfg"
 
 NS="${POD_NAMESPACE:-default}"
+
+# Check if running inside Kubernetes (these vars are injected by K8s)
+if [ -z "${KUBERNETES_SERVICE_HOST:-}" ]; then
+  echo "Not running in Kubernetes pod, starting Flink client normally"
+  exec /docker-entrypoint.sh "$@"
+fi
+
 API="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
 TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
 CACERT="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"

@@ -531,7 +531,8 @@ public class KubernetesResourceManagerDriver
                 blockedNodes,
                 overrideCpu,    // Kubeflink: K8s CPU limit/request
                 overrideMem,    // Kubeflink: total K8s memory
-                overrideNumSlots); // Kubeflink: TM slots
+                overrideNumSlots, // Kubeflink: TM slots
+                nodeAffinity);  // Kubeflink: node affinity from CSV
     }
 
 

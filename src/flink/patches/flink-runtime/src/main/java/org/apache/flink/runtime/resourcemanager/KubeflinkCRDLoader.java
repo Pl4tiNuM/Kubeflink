@@ -123,28 +123,33 @@ public final class KubeflinkCRDLoader {
     private static Collection<ResourceDeclaration> buildDeclarations(
             List<TmConfigRow> rows, Configuration configuration) {
 
+        // Create one ResourceDeclaration per CSV row to ensure each TM is created independently
+        // This allows each TM to have its own affinity settings applied correctly
         List<ResourceDeclaration> decls = new ArrayList<>();
 
         for (TmConfigRow row : rows) {
             WorkerResourceSpec spec = buildWorkerResourceSpecFromRow(row);
 
+            LOG.info("Processing TM row {}: spec={}, affinity={}", row.id, spec, row.k8sAffinity);
+
+            // Create exactly ONE TM for this row
             ResourceDeclaration decl =
                     new ResourceDeclaration(
                             spec,
-                            /* numNeeded */ 1,
+                            1,  // Each row creates exactly one TM
                             Collections.<InstanceID>emptySet());
 
             decls.add(decl);
             LOG.info(
-                    "Declared TM from CSV row {}: spec={}, numNeeded={}",
+                    "Declared ResourceDeclaration #{}: spec={}, affinity={}, numNeeded=1",
                     row.id,
                     spec,
-                    1);
+                    row.k8sAffinity);
         }
 
+        LOG.info("Total ResourceDeclarations created: {}", decls.size());
         return decls;
     }
-
 
     private static WorkerResourceSpec buildWorkerResourceSpecFromRow(TmConfigRow row) {
         WorkerResourceSpec.Builder builder = new WorkerResourceSpec.Builder();
@@ -155,7 +160,15 @@ public final class KubeflinkCRDLoader {
                 .setNetworkMemoryMB(row.networkMB)
                 .setManagedMemoryMB(row.managedMB)
                 .setNumSlots(row.flinkSlots);
-        // TODO: later we can attach extended/external resources or pass affinity downstream.
+
+        // Add a unique extended resource to differentiate TMs with identical specs
+        // This ensures each CSV row creates a distinct ResourceDeclaration
+        // The resource name includes both the TM ID and affinity to make it unique
+        String uniqueResourceName = "kubeflink-tm-" + row.id + "-" + row.k8sAffinity.replace(".", "-");
+        ExternalResource uniqueMarker = new ExternalResource(uniqueResourceName, 1);
+        builder.setExtendedResource(uniqueMarker);
+
+        LOG.info("Created WorkerResourceSpec for TM {} with unique marker: {}", row.id, uniqueResourceName);
 
         return builder.build();
     }
