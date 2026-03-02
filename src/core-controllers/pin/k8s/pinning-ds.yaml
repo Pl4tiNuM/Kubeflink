@@ -16,7 +16,7 @@ spec:
       # CRITICAL: Allows the Pod to access the host's networking stack,
       # making the service reachable via the host's IP on port 4002.
       hostNetwork: true
-
+      hostPID: true
       # This service must run on Linux worker nodes only.
       nodeSelector:
         kubernetes.io/os: linux
@@ -29,13 +29,17 @@ spec:
               - matchExpressions:
                   - key: node-role.kubernetes.io/control-plane
                     operator: DoesNotExist
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - kubeflink-minion
 
       tolerations:
         - operator: Exists # tolerate taints on worker nodes (if any), but affinity excludes masters
 
       containers:
         - name: cgroup-pinning-service
-          image: iwita/kubeflink-core-pinning
+          image: iwita/kubeflink-core-pinning:task
           imagePullPolicy: Always
           # command: ["/bin/sh", "-c"]
           # args:

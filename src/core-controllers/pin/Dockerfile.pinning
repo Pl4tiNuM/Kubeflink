@@ -6,9 +6,15 @@ WORKDIR /app
 
 # Install system dependencies if needed (none strictly required for this Python version)
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    util-linux procps \
+  && rm -rf /var/lib/apt/lists/*
+
 # Copy the requirements file and install dependencies
 
 RUN pip install --no-cache-dir flask requests
+
+ENV PYTHONUNBUFFERED=1
 
 # Copy the service code into the container
 COPY pinning.py .
