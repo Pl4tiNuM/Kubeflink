@@ -1,0 +1,14 @@
+{
+  "_comment": "CPU cores to monitor per VM node",
+  "_usage": "Define which CPU cores to monitor for utilization tracking",
+  
+  "192.168.1.228": {
+    "cores": [0, 1, 2, 3, 4, 5, 6, 7],
+    "_comment": "VM node 1 - monitor cores 0-7"
+  },
+  
+  "192.168.1.229": {
+    "cores": [0, 1, 2, 3, 4, 5, 6, 7],
+    "_comment": "VM node 2 - monitor cores 0-7"
+  }
+}

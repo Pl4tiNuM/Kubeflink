@@ -1,0 +1,163 @@
+{
+  "_comment": "Experiment configuration for Query5mod (sliding window aggregation)",
+
+  "query_name": "query5mod",
+  "namespace": "default",
+  "flink_rest_url": "http://localhost:8081",
+  "expected_tm_count": 4,
+
+  "vm_ips": ["192.168.1.228", "192.168.1.229"],
+  "_vm_ips_comment": "VM IPs where TaskManagers run (for CPU utilization via Pinner)",
+
+  "cpu_cores_file": "config_examples/cpu_cores.json",
+  "_cpu_cores_file_comment": "Path to CPU cores configuration file (defines which cores to monitor per VM)",
+
+  "physical_node_ips": ["147.102.37.24"],
+  "_physical_node_ips_comment": "Physical node IPs (for Power/Frequency via DVFS)",
+
+  "power_socket": null,
+  "_power_socket_comment": "Which socket to read power from: 'package-0', 'package-1', or null for total power",
+
+  "prometheus_url": "null",
+  "_prometheus_comment": "Prometheus server URL for Scaphandre power metrics. Requires port-forward: kubectl port-forward svc/prometheus 9090:9090",
+
+  "tick_seconds": 5,
+  "settle_seconds": 5,
+
+  "pinning": {
+    "enabled": true,
+    "mapping_source": "file",
+    "mapping_file": "config_examples/pod_core_map_q5mod.json"
+  },
+
+  "frequency_configs": {
+    "147.102.37.24": "0-23"
+  },
+
+  "thread_pinning": {
+    "enabled": false,
+    "_comment": "Pin specific threads (by name pattern) to CPU cores",
+    "policies": [
+      {
+        "pod_pattern": "taskmanager-1-1",
+        "namespace_pattern": "default",
+        "container_pattern": "flink-main-container",
+        "thread_pattern": "Source.*",
+        "cores": "0-1",
+        "_comment": "Pin Source threads"
+      },
+      {
+        "pod_pattern": "taskmanager-1-2",
+        "namespace_pattern": "default",
+        "container_pattern": "flink-main-container",
+        "thread_pattern": "Transform.*",
+        "cores": "2-3",
+        "_comment": "Pin Transformer threads"
+      },
+      {
+        "pod_pattern": "taskmanager-1-3",
+        "namespace_pattern": "default",
+        "container_pattern": "flink-main-container",
+        "thread_pattern": "SlidingWindow.*",
+        "cores": "4-5",
+        "_comment": "Pin Window operator threads"
+      },
+        {
+            "pod_pattern": "taskmanager-1-4",
+            "namespace_pattern": "default",
+            "container_pattern": "flink-main-container",
+            "thread_pattern": "Sink.*",
+            "cores": "6-7",
+            "_comment": "Pin Sink threads"
+        }
+    ]
+  },
+
+  "dvfs": {
+    "enabled": false,
+    "_comment": "When enabled=false, frequencies are left as-is (default/existing)"
+  },
+
+  "workload": {
+    "generator_type": "nexmark",
+    "_query5mod_params_comment": "Query5mod-specific parameters (passed as env vars to run script)",
+    "extra_params": {
+      "topsize": "5",
+      "swl_min": "60",
+      "sws_min": "1",
+      "wtm_ms": "1000",
+      "extsize": "1000"
+    },
+    "ramp_steps": [
+    {
+        "step_idx": 0,
+        "target_rps": 2500,
+        "duration_s": 150,
+        "_comment": "2.5k RPS for 1 minute - warm up"
+      },
+      {
+        "step_idx": 1,
+        "target_rps": 5000,
+        "duration_s": 150,
+        "_comment": "5k RPS for 1 minute - warm up"
+      },
+      {
+        "step_idx": 2,
+        "target_rps": 10000,
+        "duration_s": 150,
+        "_comment": "10k RPS for 1 minute"
+      },
+      {
+        "step_idx": 3,
+        "target_rps": 15000,
+        "duration_s": 150,
+        "_comment": "15k RPS for 1 minutes"
+      },
+      {
+        "step_idx": 4,
+        "target_rps": 20000,
+        "duration_s": 150,
+        "_comment": "20k RPS for 1 minutes"
+      },
+        {
+            "step_idx": 5,
+            "target_rps": 25000,
+            "duration_s": 150,
+            "_comment": "25k RPS for 1 minutes"
+        },
+        {
+            "step_idx": 6,
+            "target_rps": 30000,
+            "duration_s": 150,
+            "_comment": "30k RPS for 1 minutes"
+        },
+        {
+            "step_idx": 7,
+            "target_rps": 35000,
+            "duration_s": 150,
+            "_comment": "35k RPS for 1 minutes"
+        },
+        {
+            "step_idx": 8,
+            "target_rps": 40000,
+            "duration_s": 150,
+            "_comment": "40k RPS for 1 minutes"
+        },
+        {
+            "step_idx": 9,
+            "target_rps": 45000,
+            "duration_s": 150,
+            "_comment": "45k RPS for 1 minutes"
+        },
+        {
+            "step_idx": 10,
+            "target_rps": 50000,
+            "duration_s": 150,
+            "_comment": "50k RPS for 1 minutes - max load"
+        }
+    ]
+  },
+
+  "git_commit": null,
+  "image_tag": "iwita/kubeflink:v0.1-nexmark"
+}

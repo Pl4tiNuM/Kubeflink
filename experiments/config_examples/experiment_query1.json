@@ -1,0 +1,140 @@
+{
+  "_comment": "Example: Experiment with pinning enabled (CPU metrics organized by TaskManager)",
+
+  "query_name": "query1",
+  "namespace": "default",
+
+  "flink_rest_url": "http://localhost:8081",
+  "expected_tm_count": 3,
+
+
+  "vm_ips": ["192.168.1.228", "192.168.1.229"],
+  "_vm_ips_comment": "VM IPs where TaskManagers run (for CPU utilization via Pinner)",
+
+  "cpu_cores_file": "config_examples/cpu_cores.json",
+  "_cpu_cores_file_comment": "Path to CPU cores configuration file (defines which cores to monitor per VM)",
+
+  "physical_node_ips": ["147.102.37.24"],
+  "_physical_node_ips_comment": "Physical node IPs (for Power/Frequency via DVFS)",
+
+  "power_socket": null,
+  "_power_socket_comment": "Which socket to read power from: 'package-0', 'package-1', or null for total power",
+
+  "prometheus_url": null,
+  "_prometheus_comment": "Prometheus server URL for Scaphandre power metrics. Requires port-forward: kubectl port-forward svc/prometheus 9090:9090",
+
+  "tick_seconds": 10,
+  "settle_seconds": 5,
+
+  "pinning": {
+    "enabled": true,
+    "mapping_source": "file",
+    "mapping_file": "config_examples/pod_core_map.json"
+  },
+
+  "thread_pinning": {
+    "enabled": false,
+    "_comment": "Pin specific threads (by name pattern) to CPU cores - requires pod-level pinning first",
+    "policies": [
+      {
+        "pod_pattern": "taskmanager-1-1",
+        "namespace_pattern": "default",
+        "container_pattern": "flink-main-container",
+        "thread_pattern": "Source: Source",
+        "cores": "0-1",
+        "_comment": "Pin Pekko actor threads in taskmanagers"
+      },
+      {
+        "pod_pattern": "taskmanager-1-2",
+        "namespace_pattern": "default",
+        "container_pattern": "flink-main-container",
+        "thread_pattern": "Mapper.*",
+        "cores": "2-3",
+        "_comment": "Pin scheduler threads in taskmanagers"
+      },
+      {
+        "pod_pattern": "taskmanager-1-3",
+        "namespace_pattern": "default",
+        "container_pattern": "flink-main-container",
+        "thread_pattern": "Sink: Sink",
+        "cores": "0-1",
+        "_comment": "Pin REST threads in taskmanager (different pod pattern, different cores)"
+      }
+    ],
+    "_policies_comment": "Each policy can target different pods/containers with different thread patterns and cores. Policies are applied sequentially."
+  },
+
+  "dvfs": {
+    "enabled": false,
+    "_comment": "When enabled=false, frequencies are left as-is (default/existing)"
+  },
+
+  "workload": {
+    "generator_type": "nexmark",
+    "ramp_steps": [
+        {
+            "step_idx": 0,
+            "target_rps": 30000,
+            "duration_s": 150
+        },
+        {
+            "step_idx": 1,
+            "target_rps": 50000,
+            "duration_s": 150
+        },
+        {
+            "step_idx": 2,
+            "target_rps": 100000,
+            "duration_s": 150
+        },
+        {
+            "step_idx": 3,
+            "target_rps": 150000,
+            "duration_s": 150
+        },
+        {
+            "step_idx": 4,
+            "target_rps": 200000,
+            "duration_s": 150
+        },
+        {
+            "step_idx": 5,
+            "target_rps": 250000,
+            "duration_s": 150
+        },
+        {
+            "step_idx": 6,
+            "target_rps": 300000,
+            "duration_s": 150
+        },
+        {
+            "step_idx": 7,
+            "target_rps": 350000,
+            "duration_s": 150
+        },
+        {
+            "step_idx": 8,
+            "target_rps": 400000,
+            "duration_s": 150
+        },
+        {
+            "step_idx": 9,
+            "target_rps": 450000,
+            "duration_s": 150
+        },
+        {
+            "step_idx": 10,
+            "target_rps": 500000,
+            "duration_s": 150
+        },
+        {
+            "step_idx": 11,
+            "target_rps": 550000,
+            "duration_s": 150
+        }
+    ]
+  },
+
+  "git_commit": null,
+  "image_tag": "iwita/kubeflink:v0.1-nexmark"
+}

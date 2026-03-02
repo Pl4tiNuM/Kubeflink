@@ -1,0 +1,28 @@
+{
+  "_comment": "Pod to CPU core pinning configuration",
+  "_format": "Each entry specifies pod_name, node (VM IP), and cores to pin to",
+
+  "taskmanagers": [
+    {
+      "pod_name": "flink-query5mod-taskmanager-1-2",
+      "node_ip": "192.168.1.228",
+      "cores": [0, 1],
+      "_comment": "TM-2 on node1, pinned to cores 2-3"
+    },
+    {
+      "pod_name": "flink-query5mod-taskmanager-1-3",
+      "node_ip": "192.168.1.229",
+      "cores": [0, 1],
+      "_comment": "TM-3 on node2, pinned to cores 0-1"
+    }
+  ],
+
+  "_instructions": [
+    "1. Get your TaskManager pod names: kubectl get pods -l component=taskmanager -o wide",
+    "2. Note which node each pod runs on (NODE column)",
+    "3. Check available CPU cores on each node: ssh <node> lscpu",
+    "4. Assign non-overlapping core sets to pods on the same node",
+    "5. Use this file path in experiment config: pinning.mapping_file",
+    "Note: cores will be monitored per TM during the experiment"
+  ]
+}
