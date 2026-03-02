@@ -123,26 +123,69 @@ public final class KubeflinkCRDLoader {
     private static Collection<ResourceDeclaration> buildDeclarations(
             List<TmConfigRow> rows, Configuration configuration) {
 
-        List<ResourceDeclaration> decls = new ArrayList<>();
+        // Group rows by (spec, affinity) pair - only group TMs with identical specs AND affinity
+        java.util.Map<SpecAffinityKey, Integer> specCounts = new java.util.LinkedHashMap<>();
+        java.util.Map<SpecAffinityKey, WorkerResourceSpec> keyToSpec = new java.util.LinkedHashMap<>();
 
         for (TmConfigRow row : rows) {
             WorkerResourceSpec spec = buildWorkerResourceSpecFromRow(row);
+            SpecAffinityKey key = new SpecAffinityKey(spec, row.k8sAffinity);
+            
+            specCounts.put(key, specCounts.getOrDefault(key, 0) + 1);
+            keyToSpec.put(key, spec);
+            
+            LOG.info("Processing TM row {}: spec={}, affinity={}", row.id, spec, row.k8sAffinity);
+        }
+
+        List<ResourceDeclaration> decls = new ArrayList<>();
+
+        for (java.util.Map.Entry<SpecAffinityKey, Integer> entry : specCounts.entrySet()) {
+            SpecAffinityKey key = entry.getKey();
+            WorkerResourceSpec spec = keyToSpec.get(key);
+            int numNeeded = entry.getValue();
 
             ResourceDeclaration decl =
                     new ResourceDeclaration(
                             spec,
-                            /* numNeeded */ 1,
+                            numNeeded,
                             Collections.<InstanceID>emptySet());
 
             decls.add(decl);
             LOG.info(
-                    "Declared TM from CSV row {}: spec={}, numNeeded={}",
-                    row.id,
+                    "Declared ResourceDeclaration: spec={}, affinity={}, numNeeded={}",
                     spec,
-                    1);
+                    key.affinity,
+                    numNeeded);
         }
 
         return decls;
+    }
+
+    /**
+     * Key class to group TMs by both resource spec and affinity.
+     * TMs are only grouped together if they have identical specs AND identical affinity.
+     */
+    private static final class SpecAffinityKey {
+        private final WorkerResourceSpec spec;
+        private final String affinity;
+
+        SpecAffinityKey(WorkerResourceSpec spec, String affinity) {
+            this.spec = spec;
+            this.affinity = affinity != null ? affinity : "";
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            SpecAffinityKey that = (SpecAffinityKey) o;
+            return spec.equals(that.spec) && affinity.equals(that.affinity);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * spec.hashCode() + affinity.hashCode();
+        }
     }
 
 

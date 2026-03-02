@@ -63,6 +63,8 @@ public class KubernetesTaskManagerParameters extends AbstractKubernetesParameter
 
     private final Integer overrideNumSlots;   // Kubeflink
 
+    private final String nodeAffinity;  // Kubeflink: node affinity label
+
 
     public KubernetesTaskManagerParameters(
         Configuration flinkConfig,
@@ -82,8 +84,9 @@ public class KubernetesTaskManagerParameters extends AbstractKubernetesParameter
         taskManagerExternalResourceConfigKeys,
         blockedNodes,
         null,   // overrideCpuLimit
-        null,
-        null    // overrideMemoryLimit
+        null,   // overrideMemoryLimit
+        null,   // overrideNumSlots
+        null    // nodeAffinity
     );
     }
 
@@ -97,7 +100,8 @@ public class KubernetesTaskManagerParameters extends AbstractKubernetesParameter
             Set<String> blockedNodes,
             @Nullable Double overrideCpuLimit,
             @Nullable MemorySize overrideMemLimit,
-            @Nullable Integer overrideNumSlots) {
+            @Nullable Integer overrideNumSlots,
+            @Nullable String nodeAffinity) {
         super(flinkConfig);
         this.podName = checkNotNull(podName);
         this.dynamicProperties = checkNotNull(dynamicProperties);
@@ -109,6 +113,7 @@ public class KubernetesTaskManagerParameters extends AbstractKubernetesParameter
         this.overrideCpuLimit = overrideCpuLimit;
         this.overrideMemLimit = overrideMemLimit;
         this.overrideNumSlots = overrideNumSlots;
+        this.nodeAffinity = nodeAffinity;
     }
 
     @Override
@@ -129,10 +134,20 @@ public class KubernetesTaskManagerParameters extends AbstractKubernetesParameter
 
     @Override
     public Map<String, String> getNodeSelector() {
-        return Collections.unmodifiableMap(
+        Map<String, String> nodeSelector = new HashMap<>();
+
+        // First add any configured node selector
+        nodeSelector.putAll(
                 flinkConfig
                         .getOptional(KubernetesConfigOptions.TASK_MANAGER_NODE_SELECTOR)
                         .orElse(Collections.emptyMap()));
+
+        // Kubeflink: Add node affinity from CSV if specified
+        if (nodeAffinity != null && !nodeAffinity.isEmpty()) {
+            nodeSelector.put("kubernetes.io/hostname", nodeAffinity);
+        }
+
+        return Collections.unmodifiableMap(nodeSelector);
     }
 
     @Override
