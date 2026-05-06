@@ -34,16 +34,17 @@ docker run --rm -it \
   -v "$PROJECT_ROOT/.kube:/.kube" \
   -v "$PROJECT_ROOT/pod_template.yaml:/pod_template.yaml:ro" \
   -e KUBECONFIG=/.kube/config \
-  iwita/kubeflink:v0.1-nexmark \
+  iwita/kubeflink:v0.2-nexmark \
   /opt/flink/bin/flink run --target kubernetes-application \
     -Dkubernetes.cluster-id="$CLUSTER_ID" \
-    -Dkubernetes.container.image.ref=iwita/kubeflink:v0.1-nexmark \
+    -Dkubernetes.container.image.ref=iwita/kubeflink:v0.2-nexmark \
     -Dkubernetes.container.image.pull-policy=Always \
-    -Dkubernetes.taskmanager.replicas=4 \
+    -Dkubernetes.taskmanager.replicas=6 \
     -Dparallelism.default=1 \
+    -Dstate.backend.type="rocksdb" \
     -Dkubernetes.cluster.persist-on-exception=true \
     -Dkubernetes.cluster.persist.deployment=true \
-    -Dresourcemanager.taskmanager-timeout=100 \
+    -Dresourcemanager.taskmanager-timeout=5000 \
     -Dkubernetes.rest-service.exposed.type=ClusterIP \
     -Dkubernetes.pod-template-file.default=/pod_template.yaml \
     -Denv.log.dir=/var/log/flink \
@@ -58,5 +59,5 @@ docker run --rm -it \
     --extsize "$EXTSIZE" \
     --psrc 1 \
     --ptrans 1 \
-    --pwindow 1 \
-    --psink 1
+    --pwindow 10 \
+    --psink 2

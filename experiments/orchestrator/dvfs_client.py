@@ -231,3 +231,72 @@ class DvfsClient:
                 results[node_ip] = {"ok": False, "error": str(e)}
 
         return results
+
+    def set_governor(self, node_ip: str, cores: str, governor: str) -> Dict:
+        """
+        Set CPU frequency scaling governor for specified cores on a node.
+
+        Args:
+            node_ip: IP address of the worker node
+            cores: Core specification string (e.g. "0-3,8" or "all")
+            governor: Governor name ("performance", "powersave", "ondemand",
+                      "conservative", "schedutil")
+
+        Returns:
+            Dict with status from agent
+
+        Raises:
+            requests.RequestException: If request fails
+        """
+        url = f"{self._node_url(node_ip)}/api/set_governor"
+
+        payload = {
+            "cores": cores,
+            "governor": governor
+        }
+
+        start = time.time()
+        resp = requests.post(url, json=payload, timeout=self.timeout)
+        elapsed_ms = int((time.time() - start) * 1000)
+
+        resp.raise_for_status()
+        result = resp.json()
+        result["request_duration_ms"] = elapsed_ms
+
+        return result
+
+    def set_governor_multi_node(self, governor_configs: list) -> List[Dict]:
+        """
+        Apply governor settings across multiple node/core groups.
+
+        Args:
+            governor_configs: List of GovernorConfig (or dicts with node_ip, cores, governor)
+
+        Returns:
+            List of result dicts, one per config entry
+
+        Example:
+            configs = [
+                GovernorEntry(node_ip="10.0.0.1", cores="0-3", governor="performance"),
+                GovernorEntry(node_ip="10.0.0.1", cores="4-7", governor="powersave"),
+            ]
+            results = client.set_governor_multi_node(configs)
+        """
+        results = []
+
+        for cfg in governor_configs:
+            # Support both dataclass and dict
+            if hasattr(cfg, 'node_ip'):
+                node_ip, cores, governor = cfg.node_ip, cfg.cores, cfg.governor
+            else:
+                node_ip, cores, governor = cfg['node_ip'], cfg['cores'], cfg['governor']
+
+            try:
+                result = self.set_governor(node_ip=node_ip, cores=cores, governor=governor)
+                results.append({"node_ip": node_ip, "cores": cores, "governor": governor,
+                                 "ok": True, "result": result})
+            except Exception as e:
+                results.append({"node_ip": node_ip, "cores": cores, "governor": governor,
+                                 "ok": False, "error": str(e)})
+
+        return results

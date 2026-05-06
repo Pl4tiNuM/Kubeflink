@@ -4,7 +4,7 @@
   "query_name": "query5mod",
   "namespace": "default",
   "flink_rest_url": "http://localhost:8081",
-  "expected_tm_count": 4,
+  "expected_tm_count": 6,
 
   "vm_ips": ["192.168.1.228", "192.168.1.229"],
   "_vm_ips_comment": "VM IPs where TaskManagers run (for CPU utilization via Pinner)",
@@ -73,9 +73,28 @@
     ]
   },
 
+  "governor": {
+    "enabled": true,
+    "_comment": "Set CPU governor per core group on physical nodes. Applied in preamble (alongside pinning).",
+    "entries": [
+      {
+        "node_ip": "147.102.37.24",
+        "cores": "2-11",
+        "governor": "ondemand",
+        "_comment": "Cores assigned to TMs - performance governor"
+      },
+      {
+        "node_ip": "147.102.37.24",
+        "cores": "12-21",
+        "governor": "ondemand",
+        "_comment": "Remaining cores - powersave governor"
+      }
+    ]
+  },
+
   "dvfs": {
     "enabled": false,
-    "_comment": "When enabled=false, frequencies are left as-is (default/existing)"
+    "_comment": "Frequency scaling (per-core GHz). Independent of governor setting above."
   },
 
   "workload": {
@@ -159,5 +178,5 @@
   },
 
   "git_commit": null,
-  "image_tag": "iwita/kubeflink:v0.1-nexmark"
+  "image_tag": "iwita/kubeflink:v0.2-nexmark"
 }

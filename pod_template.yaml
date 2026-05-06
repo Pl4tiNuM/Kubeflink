@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: flink
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9249"
+    prometheus.io/path: "/metrics"
+spec:
+  volumes:
+    - name: flink-logs
+      hostPath:
+        path: /home/tzeneto/logs   # lives on the node/VM
+        type: DirectoryOrCreate
+    - name: input-data
+      hostPath:
+        path: /home/tzeneto/data
+        type: DirectoryOrCreate
+    - name: tm-config
+      configMap:
+        name: tm-configmap
+    - name: schedulercfg
+      configMap:
+        name: flink-schedulercfg
+  containers:
+    - name: flink-main-container
+      command: ["/opt/flink/scripts/translate_pod_to_IP.sh"]
+      env:
+      - name: FLINK_CUSTOM_HOME
+        value: /opt/flink
+      - name: FLINK_PROPERTIES
+        value: |
+          jobmanager.scheduler: Custom
+      volumeMounts:
+        - name: flink-logs
+          mountPath: /var/log/flink
+        - name: input-data
+          mountPath: /data
+        - name: tm-config
+          mountPath: /tm_config
+          readOnly: true
+        - name: schedulercfg
+          mountPath: /opt/flink/scripts/schedulercfg
+          subPath: schedulercfg

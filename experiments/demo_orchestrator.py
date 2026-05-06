@@ -23,7 +23,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from orchestrator import (
     RunContext, RunConfig,
-    RampStep, PinningConfig, ThreadPinningConfig, ThreadPinningPolicy, DvfsConfig, WorkloadConfig,
+    RampStep, PinningConfig, ThreadPinningConfig, ThreadPinningPolicy,
+    GovernorEntry, GovernorConfig, DvfsConfig, WorkloadConfig,
     ExperimentOrchestrator,
     FlinkRestScraper, PowerScraper, CpuUtilScraper, PrometheusScraper, FrequencyScraper,
     Ticker, KubeTopologyResolver,
@@ -77,7 +78,21 @@ def load_config(config_path: str) -> RunConfig:
         policies=tp_policies
     )
 
-    # Parse DVFS config
+    # Parse governor config (independent of frequency DVFS)
+    governor_entries = [
+        GovernorEntry(
+            node_ip=e['node_ip'],
+            cores=e['cores'],
+            governor=e['governor']
+        )
+        for e in config_dict.get('governor', {}).get('entries', [])
+    ]
+    governor = GovernorConfig(
+        enabled=config_dict.get('governor', {}).get('enabled', False),
+        entries=governor_entries
+    )
+
+    # Parse DVFS frequency config
     dvfs = DvfsConfig(
         enabled=config_dict.get('dvfs', {}).get('enabled', False),
         mapping_file=config_dict.get('dvfs', {}).get('mapping_file'),
@@ -114,6 +129,7 @@ def load_config(config_path: str) -> RunConfig:
         settle_seconds=config_dict.get('settle_seconds', 5),
         pinning=pinning,
         thread_pinning=thread_pinning,
+        governor=governor,
         dvfs=dvfs,
         workload=workload,
         git_commit=config_dict.get('git_commit'),
@@ -135,7 +151,7 @@ def setup_scrapers(ctx: RunContext) -> list:
             flink_rest_url=ctx.config.flink_rest_url,
             collect_task_metrics=True,
             collect_vertex_metrics=True,
-            read_timeout=8
+            read_timeout=30
         )
         scrapers.append(flink_scraper)
         print(f"✓ Configured FlinkRestScraper: {ctx.config.flink_rest_url}")
@@ -248,7 +264,8 @@ def main():
     print(f"Settle time: {config.settle_seconds}s")
     print(f"Pinning enabled: {config.pinning.enabled}")
     print(f"Thread pinning enabled: {config.thread_pinning.enabled}")
-    print(f"DVFS enabled: {config.dvfs.enabled}")
+    print(f"Governor enabled: {config.governor.enabled} ({len(config.governor.entries)} entries)")
+    print(f"DVFS (freq) enabled: {config.dvfs.enabled}")
     print(f"VM IPs (Pinner): {config.vm_ips}")
     print(f"Physical Node IPs (DVFS): {config.physical_node_ips}")
     print(f"Ramp steps: {len(config.workload.ramp_steps)}")
@@ -300,14 +317,17 @@ def main():
         orchestrator.pinner_client = PinnerClient(timeout=60)  # Must be > max reapply_seconds
         print(f"✓ Configured PinnerClient for {len(config.vm_ips)} nodes")
 
-    # Setup DVFS client if enabled
-    if config.dvfs.enabled:
-        if not config.physical_node_ips:
-            print("✗ DVFS enabled but no physical_node_ips provided")
+    # Setup DVFS client if frequency DVFS or governor settings are enabled
+    needs_dvfs_client = (
+        (config.dvfs and config.dvfs.enabled) or
+        (config.governor and config.governor.enabled)
+    )
+    if needs_dvfs_client:
+        if config.dvfs.enabled and not config.physical_node_ips:
+            print("✗ DVFS (freq) enabled but no physical_node_ips provided")
             sys.exit(1)
-        # Create DVFS client (node IPs passed per method call)
         orchestrator.dvfs_client = DvfsClient(timeout=5)
-        print(f"✓ Configured DvfsClient for {len(config.physical_node_ips)} physical nodes")
+        print(f"✓ Configured DvfsClient (dvfs={config.dvfs.enabled}, governor={config.governor.enabled})")
 
     # Execute experiment
     print("\n" + "="*60)

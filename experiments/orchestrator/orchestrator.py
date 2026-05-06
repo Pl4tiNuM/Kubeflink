@@ -99,6 +99,14 @@ class ExperimentOrchestrator:
                 if not self._apply_thread_pinning():
                     return False
 
+            # Apply CPU governor settings if enabled (preamble, alongside pinning)
+            if self.ctx.config.governor and self.ctx.config.governor.enabled:
+                print("\n" + "="*80)
+                print("Applying CPU governor settings...")
+                print("="*80)
+                if not self._apply_governor():
+                    return False
+
             if self.ctx.config.dvfs.enabled:
                 self._transition(OrchestratorState.APPLY_DVFS)
                 if not self._state_apply_dvfs():
@@ -592,6 +600,46 @@ class ExperimentOrchestrator:
 
         self.ctx.log_event("DVFS_APPLIED", core_count=len(per_core_freq))
         print(f"✓ DVFS applied to {len(per_core_freq)} cores")
+        return True
+
+    def _apply_governor(self) -> bool:
+        """Apply CPU governor settings (preamble phase, alongside pinning)"""
+        self.ctx.log_event("GOVERNOR_START")
+
+        if not self.dvfs_client:
+            print("WARNING: No DVFS client configured - skipping governor settings")
+            self.ctx.log_event("GOVERNOR_SKIPPED", reason="no_client")
+            return True
+
+        gov_cfg = self.ctx.config.governor
+        if not gov_cfg or not gov_cfg.entries:
+            print("WARNING: No governor entries defined - skipping")
+            self.ctx.log_event("GOVERNOR_SKIPPED", reason="no_entries")
+            return True
+
+        print(f"Applying {len(gov_cfg.entries)} governor setting(s)...")
+        success = 0
+        for entry in gov_cfg.entries:
+            print(f"  Node {entry.node_ip} cores [{entry.cores}] → '{entry.governor}'...")
+            try:
+                result = self.dvfs_client.set_governor(
+                    node_ip=entry.node_ip, cores=entry.cores, governor=entry.governor
+                )
+                if not result.get("error"):
+                    print(f"    ✓ Done")
+                    success += 1
+                else:
+                    err = result.get('error', 'Unknown')
+                    print(f"    ✗ Failed: {err}")
+                    self.ctx.log_event("GOVERNOR_ENTRY_FAILED", node_ip=entry.node_ip,
+                                      cores=entry.cores, governor=entry.governor, error=err)
+            except Exception as e:
+                print(f"    ✗ Exception: {e}")
+                self.ctx.log_event("GOVERNOR_ENTRY_FAILED", node_ip=entry.node_ip,
+                                  cores=entry.cores, governor=entry.governor, error=str(e))
+
+        self.ctx.log_event("GOVERNOR_APPLIED", success=success, total=len(gov_cfg.entries))
+        print(f"✓ Governors applied: {success}/{len(gov_cfg.entries)}")
         return True
 
     def _state_settle(self):

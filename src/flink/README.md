@@ -31,6 +31,8 @@ The respective names should match between the configmap and the Pod's YAML templ
 
 - `KubeflinkCRDLoader.java`: New helper that loads heterogeneous TM specs from a CSV file at `/tm_config/tms_config.csv`. Parses the rows of the `csv` and for each row builds a `WorkerResourceSpec`. Returns a `Collection<ResourceDeclaration>` consumed by ActiveResourceManager to drive heterogeneous TMs allocation.
 
+- `DefaultDeclarativeSlotPool.java`: Patches `matchOfferWithOutstandingRequirements` to annotate each offered slot's `ResourceProfile` with the TM's resource ID (pod name) as `preferredLocation` before passing it to `matchWithOutstandingRequirement`. Without this annotation, a TM-4 slot (null preferredLocation) would satisfy TM-3's location-specific requirement (since `isMatching` ignores location), causing TM-3's actual slots to be rejected as "requirement already fulfilled" and TM-3/4 tasks to time out.
+
 ### Module: `flink-kubernetes`
 - `KubernetesResourceManagerDriver.java`: Adds Kubeflink’s CSV-driven TM configuration logic. Loads per-TM settings from `/tm_config/tms_config.csv` and injects them into the TaskManager creation path. Overrides CPU, memory components (heap/offheap/network/managed), and slot count based on the CSV. The overrides are passed into `KubernetesTaskManagerParameters` for use when constructing the actual Kubernetes pod.
 

@@ -54,8 +54,23 @@ class ThreadPinningConfig:
 
 
 @dataclass
+class GovernorEntry:
+    """Single governor assignment: a set of cores on a node → governor"""
+    node_ip: str
+    cores: str    # e.g. "0-3,8" or "all"
+    governor: str  # "performance", "powersave", "ondemand", "conservative", "schedutil"
+
+
+@dataclass
+class GovernorConfig:
+    """CPU governor configuration (independent of frequency DVFS)"""
+    enabled: bool
+    entries: List['GovernorEntry'] = field(default_factory=list)
+
+
+@dataclass
 class DvfsConfig:
-    """DVFS configuration for physical CPUs"""
+    """DVFS frequency configuration for physical CPUs"""
     enabled: bool
     mapping_file: Optional[str] = None  # VM-core → physical CPU mapping
     target_freq_ghz: Optional[float] = None
@@ -96,6 +111,7 @@ class RunConfig:
     # Tuning configurations
     pinning: Optional['PinningConfig'] = None
     thread_pinning: Optional['ThreadPinningConfig'] = None
+    governor: Optional['GovernorConfig'] = None
     dvfs: Optional['DvfsConfig'] = None
     workload: Optional['WorkloadConfig'] = None
 

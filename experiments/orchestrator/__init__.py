@@ -14,7 +14,8 @@ __version__ = "0.1.0"
 
 from .run_context import (
     RunContext, RunConfig,
-    RampStep, PinningConfig, ThreadPinningConfig, ThreadPinningPolicy, DvfsConfig, WorkloadConfig,
+    RampStep, PinningConfig, ThreadPinningConfig, ThreadPinningPolicy,
+    GovernorEntry, GovernorConfig, DvfsConfig, WorkloadConfig,
     generate_run_id
 )
 from .orchestrator import ExperimentOrchestrator, OrchestratorState
@@ -34,6 +35,8 @@ __all__ = [
     "PinningConfig",
     "ThreadPinningConfig",
     "ThreadPinningPolicy",
+    "GovernorEntry",
+    "GovernorConfig",
     "DvfsConfig",
     "WorkloadConfig",
     "generate_run_id",
