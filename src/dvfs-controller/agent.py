@@ -78,6 +78,47 @@ def write_sysfs(cpu_id: str, file_name: str, value: str):
     with open(path, "w") as f:
         f.write(value)
 
+from typing import List, Union
+
+def read_available_governors(cpu_id: int) -> List[str]:
+    """
+    Return available governors for cpu_id if exposed, else empty list.
+    """
+    try:
+        s = read_sysfs(str(cpu_id), "scaling_available_governors")
+        return s.split()
+    except Exception:
+        return []
+
+def set_governor(cpu_id: int, governor: str) -> None:
+    """
+    Set scaling_governor for a given CPU.
+    """
+    write_sysfs(str(cpu_id), "scaling_governor", governor)
+
+def _parse_cores_json(v: Union[str, List[int], List[str], None]) -> List[int]:
+    """
+    Accept cores in JSON as either:
+      - "0-3,8,10" (string selector)
+      - [0,1,2]
+      - ["0","1","2"]
+    Returns sorted unique cores.
+    """
+    if v is None:
+        return []
+    if isinstance(v, str):
+        return _parse_cores_param(v)
+    if isinstance(v, list):
+        out = set()
+        for x in v:
+            if isinstance(x, int):
+                out.add(x)
+            elif isinstance(x, str) and x.strip():
+                # allow entries like "3" but not ranges inside list
+                out.add(int(x.strip()))
+        return sorted(out)
+    return []
+
 # -----------------------------
 # RAPL power monitoring
 # -----------------------------
@@ -279,91 +320,137 @@ def get_frequencies():
             res[f"cpu{c}"] = "N/A"
     return jsonify(res)
 
-@app.route("/api/get_frequencies_for_cores", methods=["GET"])
-def get_frequencies_for_cores():
-    """Return current frequency for specific cores.
-    
-    Query params:
-        cores: Core specification (e.g., "0-2,12-14")
-    
-    Returns:
-        JSON with status, cores dict, and unit
+from typing import List
+
+def _parse_cores_param(v: str) -> List[int]:
     """
-    cores_spec = request.args.get("cores", "")
-    if not cores_spec:
-        return jsonify({"status": "error", "error": "Missing 'cores' parameter"}), 400
-    
-    try:
-        # Parse core specification
-        core_list = []
-        for part in cores_spec.split(','):
-            part = part.strip()
-            if '-' in part:
-                start, end = part.split('-')
-                core_list.extend(range(int(start), int(end) + 1))
-            else:
-                core_list.append(int(part))
-        
-        # Get frequencies for specified cores
-        cores_data = {}
-        for core in core_list:
+    Parse cores like:
+      "0" -> [0]
+      "0,2,4" -> [0,2,4]
+      "0-3,8-9" -> [0,1,2,3,8,9]
+    """
+    out = set()
+    v = (v or "").strip()
+    if not v:
+        return []
+    for part in v.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            a, b = part.split("-", 1)
+            lo, hi = int(a), int(b)
+            if hi < lo:
+                lo, hi = hi, lo
+            out.update(range(lo, hi + 1))
+        else:
+            out.add(int(part))
+    return sorted(out)
+
+def get_frequency_khz(cpu_id: int) -> Optional[int]:
+    """
+    Best-effort current frequency in kHz for a CPU core.
+    Tries cpuinfo_cur_freq (often closer to actual) then scaling_cur_freq.
+    """
+    for fname in ("cpuinfo_cur_freq", "scaling_cur_freq"):
+        try:
+            return int(read_sysfs(str(cpu_id), fname))
+        except Exception:
+            pass
+    return None
+
+@app.route("/api/set_governor", methods=["POST"])
+def set_governor_endpoint():
+    """
+    POST JSON:
+      {
+        "cores": "0-3,8,10"   # OR [0,1,2] OR ["0","1"]
+        "governor": "performance"
+      }
+
+    Response includes applied/failed cores.
+    """
+    data = request.get_json(force=True) or {}
+    cores_raw = data.get("cores")
+    governor = data.get("governor")
+
+    if not governor or not isinstance(governor, str):
+        return jsonify({"status": "error", "error": "missing/invalid governor"}), 400
+
+    cores = _parse_cores_json(cores_raw)
+    if not cores:
+        return jsonify({"status": "error", "error": "missing/invalid cores (e.g. '0-3,8' or [0,1])"}), 400
+
+    # Best-effort bound check (os.cpu_count can be None in odd environments)
+    n = os.cpu_count() or 1
+
+    applied = []
+    failed = {}
+    warnings = {}
+
+    print(f"[INFO] Setting governor='{governor}' for cores: {cores}")
+
+    for c in cores:
+        if c < 0 or c >= n:
+            failed[str(c)] = f"core out of range (0..{n-1})"
+            continue
+
+        # Validate against available governors if exposed
+        avail = read_available_governors(c)
+        if avail and governor not in avail:
+            failed[str(c)] = f"unsupported governor for cpu{c}; available={avail}"
+            continue
+
+        try:
+            set_governor(c, governor)
+            # Read back for verification
             try:
-                freq = read_sysfs(str(core), "scaling_cur_freq")
-                cores_data[str(core)] = int(freq)
-            except Exception as e:
-                cores_data[str(core)] = None
-        
-        return jsonify({
-            "status": "ok",
-            "cores": cores_data,
-            "unit": "kHz"
-        })
-    
-    except Exception as e:
-        return jsonify({"status": "error", "error": str(e)}), 500
+                cur = read_sysfs(str(c), "scaling_governor")
+                if cur != governor:
+                    warnings[str(c)] = f"wrote '{governor}' but read back '{cur}' (policy grouping?)"
+            except Exception:
+                pass
+            applied.append(c)
+        except Exception as e:
+            failed[str(c)] = str(e)
+
+    status = "ok" if applied and not failed else ("partial" if applied else "error")
+    code = 200 if status in ("ok", "partial") else 500
+
+    return jsonify({
+        "status": status,
+        "requested": cores,
+        "governor": governor,
+        "applied": applied,
+        "failed": failed,
+        "warnings": warnings,
+    }), code
 
 @app.route("/api/get_frequencies_for_cores", methods=["GET"])
 def get_frequencies_for_cores():
-    """Return current frequency for specific cores.
-    
-    Query params:
-        cores: Core specification (e.g., "0-2,12-14")
-    
-    Returns:
-        JSON with status, cores dict, and unit
     """
-    cores_spec = request.args.get("cores", "")
-    if not cores_spec:
-        return jsonify({"status": "error", "error": "Missing 'cores' parameter"}), 400
-    
-    try:
-        # Parse core specification
-        core_list = []
-        for part in cores_spec.split(','):
-            part = part.strip()
-            if '-' in part:
-                start, end = part.split('-')
-                core_list.extend(range(int(start), int(end) + 1))
-            else:
-                core_list.append(int(part))
-        
-        # Get frequencies for specified cores
-        cores_data = {}
-        for core in core_list:
-            try:
-                freq = read_sysfs(str(core), "scaling_cur_freq")
-                cores_data[str(core)] = int(freq)
-            except Exception as e:
-                cores_data[str(core)] = None
-        
-        return jsonify({
-            "status": "ok",
-            "cores": cores_data,
-            "unit": "kHz"
-        })
-    
-    except Exception as e:
-        return jsonify({"status": "error", "error": str(e)}), 500
+    Query examples:
+      /api/get_frequencies_for_cores?cores=0-3,8,10
+      /api/get_frequencies_for_cores?cores=5
+    Response:
+      {"status":"ok","requested":[0,1,2],"freq_khz":{"cpu0":1200000,...}}
+    """
+    cores_s = request.args.get("cores", "")
+    cores = _parse_cores_param(cores_s)
+    if not cores:
+        return jsonify({"status": "error", "error": "missing/invalid cores= (e.g., 0-3,8)"}), 400
+
+    #n = os.cpu_count() or 1
+    res = {}
+    for c in cores:
+        if c < 0:
+            res[f"cpu{c}"] = "N/A"
+            continue
+        khz = get_frequency_khz(c)
+        res[f"cpu{c}"] = khz if khz is not None else "N/A"
+
+    return jsonify({"status": "ok", "requested": cores, "freq_khz": res})
+
 
 @app.route("/api/get_power", methods=["GET"])
 def get_power():
